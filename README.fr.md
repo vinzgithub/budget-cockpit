@@ -143,6 +143,7 @@ Guide complet, avec un conteneur LXC Proxmox et un reverse proxy : [docs/user/IN
 
 - Pas de mot de passe par défaut : la première visite crée le seul compte
 - Mots de passe hachés avec scrypt, limitation des tentatives de connexion, protection CSRF sur chaque formulaire
+- Double authentification en option : un code d'application d'authentification (TOTP) après le mot de passe, avec des codes de secours à usage unique
 - Content-Security-Policy stricte, aucun script, police ou traceur externe — Budget Cockpit n'appelle jamais Internet
 - Clés d'API affichées une seule fois et conservées uniquement sous forme d'empreinte
 - Utilisateur non root, conteneur en lecture seule

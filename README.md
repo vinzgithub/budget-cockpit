@@ -143,6 +143,7 @@ Full guide, including a Proxmox LXC and a reverse proxy: [docs/user/INSTALLATION
 
 - No default password: the first visit creates the only account
 - Passwords hashed with scrypt, login throttling, CSRF protection on every form
+- Optional two-factor authentication: a code from an authenticator app (TOTP) after the password, with single-use recovery codes
 - Strict Content-Security-Policy, no external scripts, fonts or trackers — Budget Cockpit never calls the Internet
 - API keys shown once and stored only as a hash
 - Runs as a non-root user in a read-only container

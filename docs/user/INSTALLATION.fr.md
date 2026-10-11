@@ -74,3 +74,15 @@ docker compose pull && docker compose up -d
 ```bash
 docker compose exec budget-cockpit python -m budget_cockpit.cli reset-password <identifiant>
 ```
+
+## Double authentification
+
+Active-la dans **Paramètres → Double authentification** : scanne le QR code avec une application d'authentification (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS, Bitwarden…), tape le premier code et ton mot de passe, puis range les dix codes de secours ailleurs que sur ce téléphone.
+
+Les codes dépendent de l'heure : l'horloge du serveur doit être juste. Dans un conteneur Proxmox, elle suit celle de l'hôte : vérifie que l'hôte reste à l'heure (c'est le cas par défaut).
+
+Téléphone **et** codes de secours perdus ? Désactive-la depuis le serveur, puis connecte-toi avec le mot de passe seul :
+
+```bash
+docker compose exec budget-cockpit python -m budget_cockpit.cli disable-totp <identifiant>
+```

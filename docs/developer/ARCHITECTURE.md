@@ -9,10 +9,10 @@ src/budget_cockpit/
 ├── engine.py     pure projection engine (no I/O) — the heart of Budget Cockpit
 ├── store.py      SQLite storage, validation, JSON import/export
 ├── app.py        FastAPI routes, sessions, CSRF, API
-├── security.py   scrypt hashing, tokens, CSRF helpers, login throttle
+├── security.py   scrypt hashing, TOTP and recovery codes, tokens, CSRF helpers, login throttle
 ├── i18n.py       fr/en catalogues, money and month formatting
 ├── config.py     environment variables, session key
-├── cli.py        reset-password
+├── cli.py        reset-password, disable-totp
 ├── locales/      fr.json, en.json
 ├── templates/    Jinja2 pages
 ├── static/       app.css, app.js, favicon.svg

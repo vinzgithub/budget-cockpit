@@ -74,3 +74,15 @@ docker compose pull && docker compose up -d
 ```bash
 docker compose exec budget-cockpit python -m budget_cockpit.cli reset-password <username>
 ```
+
+## Two-factor authentication
+
+Turn it on in **Settings → Two-factor authentication**: scan the QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS, Bitwarden…), type the first code and your password, then save the ten recovery codes somewhere other than that phone.
+
+The codes depend on the time: the server clock must be right. In a Proxmox container it follows the host, so check that the host keeps its time in sync (it does by default).
+
+Lost the phone **and** the recovery codes? Turn it off from the server, then log in with the password only:
+
+```bash
+docker compose exec budget-cockpit python -m budget_cockpit.cli disable-totp <username>
+```
