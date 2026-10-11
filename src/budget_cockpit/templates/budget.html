@@ -75,6 +75,12 @@
       {% endfor %}
     </tr>
     {% endfor %}
+    {% if kind == 'savings' %}
+    <tr class="savings-total" title="{{ t('budget.savings_total_help') }}">
+      <th class="sticky">{{ t('budget.savings_total') }}</th>
+      {% for v in p.savings_total %}<td class="{{ 'neg' if v < 0 }}">{{ money(v) }}</td>{% endfor %}
+    </tr>
+    {% endif %}
   </tbody>
   {% endfor %}
   <tbody class="totals">
@@ -83,7 +89,6 @@
     <tr><th class="sticky">{{ t('budget.total_savings') }}</th>{% for v in p.savings %}<td>{{ money(v) }}</td>{% endfor %}</tr>
     <tr class="balance"><th class="sticky">{{ t('budget.balance') }}</th>{% for v in p.balance %}<td class="{{ p.alerts[loop.index0] }}">{{ money(v) }}</td>{% endfor %}</tr>
     <tr class="alerts"><th class="sticky">{{ t('budget.alert') }}</th>{% for a in p.alerts %}<td class="{{ a }}">{{ t('alert.' ~ a) if a }}</td>{% endfor %}</tr>
-    <tr><th class="sticky">{{ t('budget.savings_total') }}</th>{% for v in p.savings_total %}<td>{{ money(v) }}</td>{% endfor %}</tr>
   </tbody>
   {% if p.groups %}
   <tbody class="groups">

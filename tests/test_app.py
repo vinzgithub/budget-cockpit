@@ -69,6 +69,21 @@ def test_demo_data_in_english(client):
     assert "Holiday let: year to date" in r.text
 
 
+def test_projected_savings_sit_under_the_savings_lines(client):
+    setup_account(client, demo=True)
+    store = client.app.state.store
+    month = store.get_settings("2026-10").start_month
+    savings_line = next(line for line in store.list_lines() if line.kind == "savings")
+    headers = {"X-CSRF-Token": page_csrf(client, "/budget")}
+    client.post("/budget/cell", json={"line_id": savings_line.id, "month": month, "value": "-1000"}, headers=headers)
+    html = client.get("/budget").text
+    savings_section = html.split('class="section section-savings"')[1].split("</tbody>")[0]
+    assert "Épargne totale prévue" in savings_section
+    # demo savings: 4 200 € today, the -1 000 € withdrawal replaces the 250 € monthly transfer
+    assert "3 200,00 €" in savings_section
+    assert "Épargne totale prévue" not in html.split('class="totals"')[1]
+
+
 def test_post_without_csrf_is_rejected(client):
     setup_account(client)
     r = client.post("/lines/save", data={"name": "x", "kind": "expense", "frequency": "monthly"})

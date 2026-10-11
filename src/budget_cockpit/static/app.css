@@ -169,6 +169,8 @@ tr.inactive th, tr.inactive td { opacity: .45; }
 .alerts td { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; text-align: center; }
 .groups th, .groups td { color: var(--muted); }
 td.neg { color: var(--bad); }
+.grid tr.savings-total th, .grid tr.savings-total td { font-weight: 700; background: var(--ok-bg); color: var(--ok); border-top: 2px solid var(--line); }
+.grid tr.savings-total td.neg { background: var(--bad-bg); color: var(--bad); }
 .legend { color: var(--muted); font-size: .82rem; display: flex; gap: .4rem 1rem; flex-wrap: wrap; align-items: center; }
 .swatch { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; vertical-align: -2px; border: 1px solid var(--line); }
 .swatch.override { background: var(--override-bg); }
