@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "budget-cockpit"
+version = "0.1.0"
+description = "Self-hosted month-by-month budget forecast: know what will be left on your account. Home Assistant friendly."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Vincent Fournet" }]
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["budget", "personal-finance", "forecast", "self-hosted", "home-assistant"]
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn>=0.32,<0.33",
+    "jinja2>=3.1.4,<4",
+    "itsdangerous>=2.2,<3",
+    "python-multipart>=0.0.19,<0.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.8"]
+
+[project.urls]
+Homepage = "https://github.com/vinzgithub/budget-cockpit"
+Issues = "https://github.com/vinzgithub/budget-cockpit/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+budget_cockpit = ["templates/*.html", "static/*", "locales/*.json", "data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]

@@ -1,0 +1,447 @@
+"""SQLite storage, plus validated JSON import/export (backup format)."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from threading import RLock
+
+from .engine import FREQUENCIES, KINDS, Line, Override, Settings, parse_month
+
+EXPORT_FORMAT = "budget-cockpit"
+# Backups made before the project was renamed stay importable.
+LEGACY_EXPORT_FORMATS = frozenset({"reste"})
+EXPORT_VERSION = 1
+MAX_AMOUNT = Decimal("1000000000")
+MAX_LINES = 500
+MAX_OVERRIDES = 20000
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL,
+    pw_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS lines (
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
+    grp TEXT NOT NULL DEFAULT '', amount TEXT NOT NULL DEFAULT '0',
+    frequency TEXT NOT NULL, month INTEGER, start TEXT, end_month TEXT,
+    profile TEXT NOT NULL DEFAULT '[]', yearly_table TEXT NOT NULL DEFAULT '{}',
+    active INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS overrides (
+    line_id INTEGER NOT NULL REFERENCES lines(id) ON DELETE CASCADE,
+    month TEXT NOT NULL, amount TEXT NOT NULL, paid INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (line_id, month));
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
+    created_at TEXT NOT NULL, last_used TEXT);
+"""
+
+
+class ValidationError(ValueError):
+    """Invalid user data. ``key`` is a translation key, ``detail`` extra info."""
+
+    def __init__(self, key: str, detail: str = ""):
+        super().__init__(f"{key}: {detail}")
+        self.key = key
+        self.detail = detail
+
+
+def now() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+# ------------------------------------------------------------------ parsing
+def parse_amount(value, allow_empty: bool = False) -> Decimal | None:
+    """Accepts 1234.56, 1234,56, 1 234,56, 1,234.56, '1 234,56 €', -59.90."""
+    if value is None:
+        if allow_empty:
+            return None
+        raise ValidationError("error.amount", "")
+    if isinstance(value, int | Decimal):
+        d = Decimal(value)
+    else:
+        s = str(value).strip()
+        for ch in ("€", "$", "£", "CHF", " ", " ", " ", "'"):
+            s = s.replace(ch, "")
+        s = s.replace("−", "-")
+        if s == "":
+            if allow_empty:
+                return None
+            raise ValidationError("error.amount", str(value))
+        if "," in s and "." in s:
+            if s.rfind(",") > s.rfind("."):
+                s = s.replace(".", "").replace(",", ".")
+            else:
+                s = s.replace(",", "")
+        else:
+            s = s.replace(",", ".")
+        try:
+            d = Decimal(s)
+        except InvalidOperation:
+            raise ValidationError("error.amount", str(value)) from None
+    if not d.is_finite() or abs(d) > MAX_AMOUNT:
+        raise ValidationError("error.amount", str(value))
+    return d
+
+
+def parse_month_value(value, allow_empty: bool = True) -> str | None:
+    if value is None or str(value).strip() == "":
+        if allow_empty:
+            return None
+        raise ValidationError("error.month", "")
+    try:
+        y, m = parse_month(str(value))
+    except (ValueError, AttributeError):
+        raise ValidationError("error.month", str(value)) from None
+    return f"{y:04d}-{m:02d}"
+
+
+def clean_text(value, max_len: int, required: bool = False, field: str = "error.name") -> str:
+    s = "" if value is None else str(value).strip()
+    if required and not s:
+        raise ValidationError(field, "")
+    if len(s) > max_len:
+        raise ValidationError("error.too_long", str(max_len))
+    return s
+
+
+def line_from_dict(data: dict, line_id: int = 0, position: int = 0) -> Line:
+    """Builds and validates a Line from user/JSON data."""
+    kind = str(data.get("kind", "expense"))
+    if kind not in KINDS:
+        raise ValidationError("error.kind", kind)
+    freq = str(data.get("frequency", "monthly"))
+    if freq not in FREQUENCIES:
+        raise ValidationError("error.frequency", freq)
+    month = data.get("month")
+    if freq == "yearly":
+        try:
+            month = int(month)
+        except (TypeError, ValueError):
+            raise ValidationError("error.month_of_year", str(month)) from None
+        if not 1 <= month <= 12:
+            raise ValidationError("error.month_of_year", str(month))
+    else:
+        month = None
+    profile_raw = data.get("profile") or []
+    if freq == "profile":
+        if len(profile_raw) != 12:
+            raise ValidationError("error.profile", str(len(profile_raw)))
+        profile = [parse_amount(v if str(v).strip() != "" else "0") for v in profile_raw]
+    else:
+        profile = [Decimal(0)] * 12
+    table: dict[int, Decimal] = {}
+    if freq == "yearly_table":
+        for k, v in (data.get("yearly_table") or {}).items():
+            try:
+                year = int(k)
+            except (TypeError, ValueError):
+                raise ValidationError("error.year", str(k)) from None
+            if not 1900 <= year <= 2200:
+                raise ValidationError("error.year", str(k))
+            table[year] = parse_amount(v)
+        if not table:
+            raise ValidationError("error.yearly_table", "")
+    start = parse_month_value(data.get("start"))
+    end = parse_month_value(data.get("end"))
+    if start and end and end < start:
+        raise ValidationError("error.end_before_start", f"{start} > {end}")
+    amount = parse_amount(data.get("amount") if data.get("amount") not in (None, "") else "0")
+    return Line(
+        id=line_id,
+        name=clean_text(data.get("name"), 80, required=True),
+        kind=kind,
+        group=clean_text(data.get("group"), 60),
+        amount=amount,
+        frequency=freq,
+        month=month,
+        start=start,
+        end=end,
+        profile=profile,
+        yearly_table=table,
+        active=bool(data.get("active", True)),
+        position=position,
+        note=clean_text(data.get("note"), 500),
+    )
+
+
+def settings_from_dict(data: dict) -> Settings:
+    horizon = int(data.get("horizon", 24))
+    if not 1 <= horizon <= 120:
+        raise ValidationError("error.horizon", str(horizon))
+    locale = str(data.get("locale", "fr"))
+    if locale not in ("fr", "en"):
+        raise ValidationError("error.locale", locale)
+    currency = str(data.get("currency", "EUR"))
+    if currency not in ("EUR", "USD", "GBP", "CHF"):
+        raise ValidationError("error.currency", currency)
+    return Settings(
+        start_month=parse_month_value(data.get("start_month"), allow_empty=False),
+        horizon=horizon,
+        current_balance=parse_amount(data.get("current_balance", "0")),
+        savings_balance=parse_amount(data.get("savings_balance", "0")),
+        safety_threshold=parse_amount(data.get("safety_threshold", "100")),
+        currency=currency,
+        locale=locale,
+    )
+
+
+def settings_to_dict(s: Settings) -> dict:
+    return {
+        "start_month": s.start_month, "horizon": s.horizon,
+        "current_balance": str(s.current_balance), "savings_balance": str(s.savings_balance),
+        "safety_threshold": str(s.safety_threshold), "currency": s.currency, "locale": s.locale,
+    }
+
+
+def line_to_dict(line: Line) -> dict:
+    return {
+        "name": line.name, "kind": line.kind, "group": line.group, "amount": str(line.amount),
+        "frequency": line.frequency, "month": line.month, "start": line.start, "end": line.end,
+        "profile": [str(v) for v in line.profile] if line.frequency == "profile" else [],
+        "yearly_table": {str(k): str(v) for k, v in sorted(line.yearly_table.items())},
+        "active": line.active, "note": line.note,
+    }
+
+
+# -------------------------------------------------------------------- store
+class Store:
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = RLock()
+        self.db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA foreign_keys = ON")
+        self.db.execute("PRAGMA journal_mode = WAL")
+        self.db.executescript(SCHEMA)
+        if self.get_meta("schema_version") is None:
+            self.set_meta("schema_version", "1")
+
+    def close(self) -> None:
+        self.db.close()
+
+    # meta / settings
+    def get_meta(self, key: str) -> str | None:
+        row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._lock:
+            self.db.execute("INSERT INTO meta(key, value) VALUES(?, ?) "
+                            "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+    def get_settings(self, default_month: str, default_locale: str = "fr") -> Settings:
+        raw = self.get_meta("settings")
+        if raw is None:
+            return Settings(start_month=default_month, locale=default_locale)
+        return settings_from_dict(json.loads(raw))
+
+    def save_settings(self, s: Settings) -> None:
+        self.set_meta("settings", json.dumps(settings_to_dict(s)))
+
+    # users
+    def user_count(self) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def create_user(self, username: str, pw_hash: str) -> int:
+        with self._lock:
+            cur = self.db.execute("INSERT INTO users(username, pw_hash, created_at) VALUES(?, ?, ?)",
+                                  (username, pw_hash, now()))
+            return cur.lastrowid
+
+    def get_user_by_name(self, username: str):
+        return self.db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+
+    def get_user(self, user_id: int):
+        return self.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    def set_password(self, user_id: int, pw_hash: str) -> None:
+        with self._lock:
+            self.db.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (pw_hash, user_id))
+
+    # lines
+    @staticmethod
+    def _row_to_line(r) -> Line:
+        profile = [Decimal(v) for v in json.loads(r["profile"])] or [Decimal(0)] * 12
+        table = {int(k): Decimal(v) for k, v in json.loads(r["yearly_table"]).items()}
+        return Line(id=r["id"], name=r["name"], kind=r["kind"], group=r["grp"],
+                    amount=Decimal(r["amount"]), frequency=r["frequency"], month=r["month"],
+                    start=r["start"], end=r["end_month"], profile=profile, yearly_table=table,
+                    active=bool(r["active"]), position=r["position"], note=r["note"])
+
+    def list_lines(self) -> list[Line]:
+        rows = self.db.execute("SELECT * FROM lines ORDER BY position, id").fetchall()
+        return [self._row_to_line(r) for r in rows]
+
+    def get_line(self, line_id: int) -> Line | None:
+        r = self.db.execute("SELECT * FROM lines WHERE id = ?", (line_id,)).fetchone()
+        return self._row_to_line(r) if r else None
+
+    def _line_params(self, line: Line) -> tuple:
+        return (line.name, line.kind, line.group, str(line.amount), line.frequency, line.month,
+                line.start, line.end,
+                json.dumps([str(v) for v in line.profile] if line.frequency == "profile" else []),
+                json.dumps({str(k): str(v) for k, v in line.yearly_table.items()}),
+                int(line.active), line.position, line.note)
+
+    def save_line(self, line: Line) -> int:
+        with self._lock:
+            if line.id:
+                self.db.execute(
+                    "UPDATE lines SET name=?, kind=?, grp=?, amount=?, frequency=?, month=?, start=?,"
+                    " end_month=?, profile=?, yearly_table=?, active=?, position=?, note=? WHERE id=?",
+                    (*self._line_params(line), line.id))
+                return line.id
+            if self.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0] >= MAX_LINES:
+                raise ValidationError("error.too_many_lines", str(MAX_LINES))
+            line.position = (self.db.execute("SELECT COALESCE(MAX(position), 0) FROM lines")
+                             .fetchone()[0] + 1)
+            cur = self.db.execute(
+                "INSERT INTO lines(name, kind, grp, amount, frequency, month, start, end_month,"
+                " profile, yearly_table, active, position, note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                self._line_params(line))
+            return cur.lastrowid
+
+    def delete_line(self, line_id: int) -> None:
+        with self._lock:
+            self.db.execute("DELETE FROM lines WHERE id = ?", (line_id,))
+
+    def move_line(self, line_id: int, direction: int) -> None:
+        """Swap with the previous/next line of the same kind."""
+        with self._lock:
+            lines = [ln for ln in self.list_lines()]
+            target = next((ln for ln in lines if ln.id == line_id), None)
+            if target is None:
+                return
+            same = [ln for ln in lines if ln.kind == target.kind]
+            i = same.index(target)
+            j = i + direction
+            if not 0 <= j < len(same):
+                return
+            other = same[j]
+            self.db.execute("BEGIN")
+            self.db.execute("UPDATE lines SET position = ? WHERE id = ?", (other.position, target.id))
+            self.db.execute("UPDATE lines SET position = ? WHERE id = ?", (target.position, other.id))
+            if other.position == target.position:
+                self.db.execute("UPDATE lines SET position = position + ? WHERE id = ?",
+                                (direction, target.id))
+            self.db.execute("COMMIT")
+
+    # overrides
+    def list_overrides(self) -> list[Override]:
+        rows = self.db.execute("SELECT * FROM overrides").fetchall()
+        return [Override(r["line_id"], r["month"], Decimal(r["amount"]), bool(r["paid"])) for r in rows]
+
+    def get_override(self, line_id: int, month: str) -> Override | None:
+        r = self.db.execute("SELECT * FROM overrides WHERE line_id = ? AND month = ?",
+                            (line_id, month)).fetchone()
+        return Override(r["line_id"], r["month"], Decimal(r["amount"]), bool(r["paid"])) if r else None
+
+    def set_override(self, line_id: int, month: str, amount: Decimal, paid: bool = False) -> None:
+        with self._lock:
+            n = self.db.execute("SELECT COUNT(*) FROM overrides").fetchone()[0]
+            if n >= MAX_OVERRIDES and self.get_override(line_id, month) is None:
+                raise ValidationError("error.too_many_overrides", str(MAX_OVERRIDES))
+            self.db.execute(
+                "INSERT INTO overrides(line_id, month, amount, paid) VALUES(?, ?, ?, ?) "
+                "ON CONFLICT(line_id, month) DO UPDATE SET amount = excluded.amount, paid = excluded.paid",
+                (line_id, month, str(amount), int(paid)))
+
+    def delete_override(self, line_id: int, month: str) -> None:
+        with self._lock:
+            self.db.execute("DELETE FROM overrides WHERE line_id = ? AND month = ?", (line_id, month))
+
+    def replace_overrides(self, overrides: list[Override]) -> None:
+        with self._lock:
+            self.db.execute("BEGIN")
+            self.db.execute("DELETE FROM overrides")
+            self.db.executemany(
+                "INSERT INTO overrides(line_id, month, amount, paid) VALUES(?, ?, ?, ?)",
+                [(o.line_id, o.month, str(o.amount), int(o.paid)) for o in overrides])
+            self.db.execute("COMMIT")
+
+    # API tokens
+    def add_token(self, name: str, token_hash: str) -> None:
+        with self._lock:
+            self.db.execute("INSERT INTO api_tokens(name, token_hash, created_at) VALUES(?, ?, ?)",
+                            (name, token_hash, now()))
+
+    def list_tokens(self):
+        return self.db.execute("SELECT id, name, created_at, last_used FROM api_tokens ORDER BY id").fetchall()
+
+    def check_token(self, token_hash: str) -> bool:
+        with self._lock:
+            row = self.db.execute("SELECT id FROM api_tokens WHERE token_hash = ?", (token_hash,)).fetchone()
+            if row:
+                self.db.execute("UPDATE api_tokens SET last_used = ? WHERE id = ?", (now(), row["id"]))
+            return row is not None
+
+    def revoke_token(self, token_id: int) -> None:
+        with self._lock:
+            self.db.execute("DELETE FROM api_tokens WHERE id = ?", (token_id,))
+
+    # backup
+    def export_data(self, settings: Settings) -> dict:
+        by_line: dict[int, list[dict]] = {}
+        for o in self.list_overrides():
+            by_line.setdefault(o.line_id, []).append(
+                {"month": o.month, "amount": str(o.amount), "paid": o.paid})
+        lines = []
+        for line in self.list_lines():
+            d = line_to_dict(line)
+            d["overrides"] = sorted(by_line.get(line.id, []), key=lambda x: x["month"])
+            lines.append(d)
+        return {"format": EXPORT_FORMAT, "version": EXPORT_VERSION, "exported_at": now(),
+                "settings": settings_to_dict(settings), "lines": lines}
+
+    def import_data(self, data: dict) -> Settings:
+        """Validates everything first, then replaces settings, lines and exceptions."""
+        if not isinstance(data, dict) or (
+            data.get("format") != EXPORT_FORMAT and data.get("format") not in LEGACY_EXPORT_FORMATS
+        ):
+            raise ValidationError("error.import_format", "")
+        if data.get("version") != EXPORT_VERSION:
+            raise ValidationError("error.import_version", str(data.get("version")))
+        settings = settings_from_dict(data.get("settings") or {})
+        raw_lines = data.get("lines") or []
+        if not isinstance(raw_lines, list) or len(raw_lines) > MAX_LINES:
+            raise ValidationError("error.too_many_lines", str(MAX_LINES))
+        parsed: list[tuple[Line, list[Override]]] = []
+        total_overrides = 0
+        for pos, raw in enumerate(raw_lines, start=1):
+            line = line_from_dict(raw, 0, pos)
+            ovs = []
+            for o in raw.get("overrides") or []:
+                ovs.append(Override(0, parse_month_value(o.get("month"), allow_empty=False),
+                                    parse_amount(o.get("amount", "0")), bool(o.get("paid", False))))
+            total_overrides += len(ovs)
+            parsed.append((line, ovs))
+        if total_overrides > MAX_OVERRIDES:
+            raise ValidationError("error.too_many_overrides", str(MAX_OVERRIDES))
+        with self._lock:
+            self.db.execute("BEGIN")
+            try:
+                self.db.execute("DELETE FROM overrides")
+                self.db.execute("DELETE FROM lines")
+                for line, ovs in parsed:
+                    cur = self.db.execute(
+                        "INSERT INTO lines(name, kind, grp, amount, frequency, month, start, end_month,"
+                        " profile, yearly_table, active, position, note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        self._line_params(line))
+                    for o in ovs:
+                        self.db.execute(
+                            "INSERT OR REPLACE INTO overrides(line_id, month, amount, paid) VALUES(?,?,?,?)",
+                            (cur.lastrowid, o.month, str(o.amount), int(o.paid)))
+                self.db.execute(
+                    "INSERT INTO meta(key, value) VALUES('settings', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (json.dumps(settings_to_dict(settings)),))
+                self.db.execute("COMMIT")
+            except Exception:
+                self.db.execute("ROLLBACK")
+                raise
+        return settings

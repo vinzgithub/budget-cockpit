@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <meta name="referrer" content="same-origin">
+  <title>{% block title %}Budget Cockpit{% endblock %} · Budget Cockpit</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v={{ version }}">
+  <script src="/static/app.js?v={{ version }}" defer></script>
+</head>
+<body>
+{% set path = request.url.path %}
+{% if user %}
+<header class="topbar">
+  <a class="brand" href="/budget"><img src="/static/favicon.svg" alt="" width="26" height="26"><span>Budget Cockpit</span></a>
+  <nav class="nav">
+    <a href="/budget" class="{{ 'active' if path.startswith('/budget') }}">{{ t('nav.budget') }}</a>
+    <a href="/lines" class="{{ 'active' if path.startswith('/lines') }}">{{ t('nav.lines') }}</a>
+    <a href="/summary" class="{{ 'active' if path.startswith('/summary') }}">{{ t('nav.summary') }}</a>
+    <a href="/settings" class="{{ 'active' if path.startswith('/settings') }}">{{ t('nav.settings') }}</a>
+  </nav>
+  <div class="tools">
+    <form method="post" action="/lang" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="back" value="{{ path }}">
+      <button class="link" name="lang" value="{{ 'en' if lang == 'fr' else 'fr' }}">{{ t('nav.other_language') }}</button>
+    </form>
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="link">{{ t('nav.logout') }}</button>
+    </form>
+  </div>
+</header>
+{% endif %}
+<main class="{% block mainclass %}page{% endblock %}">
+  {% for level, key, kw in flashes %}<div class="flash {{ level }}">{{ t(key, **kw) }}</div>{% endfor %}
+  {% if error %}<div class="flash error" role="alert">{{ error }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">Budget Cockpit {{ version }} · <a href="https://github.com/vinzgithub/budget-cockpit" rel="noopener">GitHub</a></footer>
+</body>
+</html>

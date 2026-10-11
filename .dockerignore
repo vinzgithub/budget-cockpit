@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+venv
+data
+docs
+tests
+**/__pycache__
+*.db
+*.db-wal
+*.db-shm
+.secret_key

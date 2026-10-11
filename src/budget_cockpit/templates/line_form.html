@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ t('line.edit_title') if line.id else t('line.new_title') }}{% endblock %}
+{% block content %}
+{% set r = raw if raw is defined else none %}
+<div class="head-row">
+  <h1>{{ t('line.edit_title') if line.id else t('line.new_title') }}</h1>
+  <a class="link" href="/lines">← {{ t('nav.lines') }}</a>
+</div>
+<form method="post" action="/lines/save" class="panel form-grid">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="id" value="{{ line.id or '' }}">
+
+  <label>{{ t('line.name') }}
+    <input name="name" value="{{ r.name if r else line.name }}" maxlength="80" required autofocus></label>
+
+  <label>{{ t('line.kind') }}
+    <select name="kind">
+      {% for k in kinds %}<option value="{{ k }}" {{ 'selected' if (r.kind if r else line.kind) == k }}>{{ t('kind.' ~ k) }}</option>{% endfor %}
+    </select></label>
+
+  <label><span>{{ t('line.group') }} <span class="muted">({{ t('common.optional') }})</span></span>
+    <input name="group" value="{{ r.group if r else line.group }}" maxlength="60" list="groups">
+    <datalist id="groups">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
+    <small class="muted">{{ t('line.group_help') }}</small></label>
+
+  <label>{{ t('line.frequency') }}
+    <select name="frequency" id="frequency">
+      {% for f in ['monthly', 'yearly', 'profile', 'manual', 'yearly_table'] %}
+      <option value="{{ f }}" {{ 'selected' if (r.frequency if r else line.frequency) == f }}>{{ t('freq.' ~ f) }}</option>
+      {% endfor %}
+    </select>
+    <small class="muted" data-freq="monthly">{{ t('freq.monthly_help') }}</small>
+    <small class="muted" data-freq="yearly">{{ t('freq.yearly_help') }}</small>
+    <small class="muted" data-freq="profile">{{ t('freq.profile_help') }}</small>
+    <small class="muted" data-freq="manual">{{ t('freq.manual_help') }}</small>
+    <small class="muted" data-freq="yearly_table">{{ t('freq.yearly_table_help') }}</small>
+  </label>
+
+  <label data-freq="monthly yearly">{{ t('line.amount') }}
+    <input name="amount" inputmode="decimal" value="{{ r.amount if r else (plain(line.amount) if line.id else '') }}" placeholder="0"></label>
+
+  <label data-freq="yearly">{{ t('line.month_of_year') }}
+    <select name="month">
+      {% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if (r.month if r else line.month)|string == i|string }}>{{ t('month.' ~ i) }}</option>{% endfor %}
+    </select></label>
+
+  <fieldset data-freq="profile" class="span2">
+    <legend>{{ t('line.profile') }}</legend>
+    <div class="profile-grid">
+      {% for i in range(12) %}
+      <label>{{ t('month.' ~ (i + 1)) }}
+        <input name="profile_{{ i + 1 }}" inputmode="decimal" value="{{ r.profile[i] if r else (plain(line.profile[i]) if line.frequency == 'profile' else '') }}" placeholder="0"></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <label data-freq="yearly_table" class="span2">{{ t('line.yearly_table') }}
+    <textarea name="yearly_table" rows="5" placeholder="2027 = 1200&#10;2028 = 1500">{{ table_text }}</textarea>
+    <small class="muted">{{ t('line.yearly_table_help') }}</small></label>
+
+  <label><span>{{ t('line.start') }} <span class="muted">({{ t('common.optional') }})</span></span>
+    <input type="month" name="start" value="{{ r.start if r else (line.start or '') }}"></label>
+  <label><span>{{ t('line.end') }} <span class="muted">({{ t('common.optional') }})</span></span>
+    <input type="month" name="end" value="{{ r.end if r else (line.end or '') }}"></label>
+
+  <label class="span2"><span>{{ t('line.note') }} <span class="muted">({{ t('common.optional') }})</span></span>
+    <textarea name="note" rows="2" maxlength="500">{{ r.note if r else line.note }}</textarea></label>
+
+  <label class="check span2"><input type="checkbox" name="active" {{ 'checked' if (r.active if r else (line.active or not line.id)) }}> {{ t('line.active') }}</label>
+
+  <div class="span2 buttons">
+    <button class="primary">{{ t('common.save') }}</button>
+    <a class="button" href="/lines">{{ t('common.cancel') }}</a>
+  </div>
+</form>
+{% endblock %}

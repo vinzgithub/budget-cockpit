@@ -1,0 +1,24 @@
+services:
+  budget-cockpit:
+    image: ghcr.io/vinzgithub/budget-cockpit:latest
+    container_name: budget-cockpit
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - budget-cockpit-data:/data
+    environment:
+      TZ: Europe/Paris
+      # BUDGET_COCKPIT_COOKIE_SECURE: "true"        # set when Budget Cockpit is served over HTTPS
+      # BUDGET_COCKPIT_FRAME_ANCESTORS: "https://ha.example.org"   # to show Budget Cockpit inside Home Assistant
+      # FORWARDED_ALLOW_IPS: "10.0.0.2"    # IP of your reverse proxy, if any
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  budget-cockpit-data:

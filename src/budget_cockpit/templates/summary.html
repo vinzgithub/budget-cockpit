@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.summary') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.summary') }}</h1>
+<p class="muted">{{ t('summary.intro') }}</p>
+<section class="panel">
+<div class="grid-wrap">
+<table class="list summary">
+  <thead><tr><th></th>{% for y in years %}<th class="num">{{ y.year }}{% if y.months < 12 %} <span class="muted">({{ t('summary.months', n=y.months) }})</span>{% endif %}</th>{% endfor %}</tr></thead>
+  <tbody>
+    <tr><th>{{ t('budget.total_income') }}</th>{% for y in years %}<td class="num">{{ money(y.income, 0) }}</td>{% endfor %}</tr>
+    <tr><th>{{ t('budget.total_expense') }}</th>{% for y in years %}<td class="num">{{ money(y.expense, 0) }}</td>{% endfor %}</tr>
+    <tr><th>{{ t('summary.planned_savings') }}</th>{% for y in years %}<td class="num">{{ money(y.savings, 0) }}</td>{% endfor %}</tr>
+    <tr><th>{{ t('summary.unallocated') }}</th>{% for y in years %}<td class="num {{ 'neg' if y.unallocated < 0 }}">{{ money(y.unallocated, 0) }}</td>{% endfor %}</tr>
+    <tr class="strong"><th>{{ t('summary.capacity') }}</th>{% for y in years %}<td class="num {{ 'neg' if y.capacity < 0 }}">{{ money(y.capacity, 0) }}</td>{% endfor %}</tr>
+    <tr class="strong"><th>{{ t('summary.per_month') }}</th>{% for y in years %}<td class="num {{ 'neg' if y.capacity_per_month < 0 }}">{{ money(y.capacity_per_month, 0) }}</td>{% endfor %}</tr>
+    {% for g in groups %}
+    <tr><th>{{ t('summary.group_net', group=g) }}</th>{% for y in years %}<td class="num {{ 'neg' if y.groups.get(g, 0) < 0 }}">{{ money(y.groups.get(g, 0), 0) }}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+</section>
+<p class="muted small">{{ t('summary.footnote') }}</p>
+{% endblock %}

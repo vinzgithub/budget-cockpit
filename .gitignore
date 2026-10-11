@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Local data: never commit your finances
+data/
+*.db
+*.db-wal
+*.db-shm
+.secret_key
+budget-cockpit-backup-*.json
+*-import-*.json
+reste-backup-*.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~

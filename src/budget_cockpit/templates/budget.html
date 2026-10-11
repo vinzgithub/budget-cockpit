@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.budget') }}{% endblock %}
+{% block mainclass %}page wide{% endblock %}
+{% block content %}
+{% set first_alert = p.first_alert %}
+{% set lowest = p.lowest %}
+<section class="cards">
+  <div class="card {{ 'card-bad' if p.alerts[0] == 'overdraft' else ('card-warn' if p.alerts[0] == 'warning' else '') }}">
+    <div class="card-label">{{ t('budget.card_balance', month=month(p.months[0], true)) }}</div>
+    <div class="card-value">{{ money(p.balance[0]) }}</div>
+    <div class="card-sub">{{ t('budget.card_balance_sub') }}</div>
+  </div>
+  <div class="card {{ 'card-bad' if lowest[1] < 0 else ('card-warn' if lowest[1] < s.safety_threshold else '') }}">
+    <div class="card-label">{{ t('budget.card_lowest') }}</div>
+    <div class="card-value">{{ money(lowest[1]) }}</div>
+    <div class="card-sub">{{ month(lowest[0], true) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">{{ t('budget.card_savings') }}</div>
+    <div class="card-value">{{ money(p.savings_total[0]) }}</div>
+    <div class="card-sub">{{ t('budget.card_savings_sub', month=month(p.months[0], true)) }}</div>
+  </div>
+  <div class="card {{ 'card-bad' if first_alert and first_alert[1] == 'overdraft' else ('card-warn' if first_alert else 'card-ok') }}">
+    <div class="card-label">{{ t('budget.card_alert') }}</div>
+    {% if first_alert %}
+      <div class="card-value small">{{ t('alert.' ~ first_alert[1]) }}</div>
+      <div class="card-sub">{{ t('budget.card_alert_from', month=month(first_alert[0], true)) }}</div>
+    {% else %}
+      <div class="card-value small">{{ t('budget.card_alert_none') }}</div>
+      <div class="card-sub">{{ t('budget.card_alert_none_sub', n=p.months|length) }}</div>
+    {% endif %}
+  </div>
+</section>
+
+<form method="post" action="/budget/balance" class="balance-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="current_balance">{{ t('budget.balance_today') }}</label>
+  <input id="current_balance" name="current_balance" inputmode="decimal" value="{{ plain(s.current_balance) }}">
+  <button class="button">{{ t('budget.balance_update') }}</button>
+  <span class="muted small">{{ t('budget.balance_hint') }}</span>
+</form>
+<p class="hint">{{ t('budget.hint') }}</p>
+
+<div class="grid-wrap" id="grid">
+<table class="grid">
+  <thead>
+    <tr>
+      <th class="sticky corner">{{ t('budget.line') }}</th>
+      {% for m in p.months %}<th class="{{ 'current' if loop.first }}">{{ month(m) }}</th>{% endfor %}
+    </tr>
+  </thead>
+  {% for kind, lines in sections %}
+  <tbody class="section section-{{ kind }}">
+    <tr class="section-head">
+      <th class="sticky">{{ t('kind.' ~ kind ~ '_plural') }}</th>
+      <td colspan="{{ p.months|length }}"><a class="add" href="/lines/new?kind={{ kind }}">+ {{ t('lines.add') }}</a></td>
+    </tr>
+    {% for line in lines %}
+    <tr class="{{ 'inactive' if not line.active }}">
+      <th class="sticky line-name"><a href="/lines/{{ line.id }}/edit">{{ line.name }}</a>{% if line.group %} <span class="tag">{{ line.group }}</span>{% endif %}</th>
+      {% for c in p.cells[line.id] %}
+      {% set m = p.months[loop.index0] %}
+      <td class="cell {{ c.state }}{{ ' zero' if c.amount == 0 and c.state == 'rule' }}"
+          data-line="{{ line.id }}" data-month="{{ m }}" data-state="{{ c.state }}"
+          data-value="{{ '' if c.state == 'paid' else plain(c.amount) }}"
+          title="{{ t('budget.state_' ~ c.state) }}">
+        {%- if c.state == 'paid' -%}<span class="paid-mark">✓ {{ t('budget.paid_short') }}</span>
+        {%- elif c.amount == 0 -%}<span class="dot">·</span>
+        {%- else -%}{{ money(c.amount) }}{%- endif -%}
+        {%- if loop.first and (c.amount != 0 or c.state == 'paid') -%}
+          <button type="button" class="paid-toggle" data-line="{{ line.id }}" data-month="{{ m }}"
+                  title="{{ t('budget.unmark_paid') if c.state == 'paid' else t('budget.mark_paid') }}">{{ '↺' if c.state == 'paid' else '✓' }}</button>
+        {%- endif -%}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% endfor %}
+  <tbody class="totals">
+    <tr><th class="sticky">{{ t('budget.total_income') }}</th>{% for v in p.income %}<td>{{ money(v) }}</td>{% endfor %}</tr>
+    <tr><th class="sticky">{{ t('budget.total_expense') }}</th>{% for v in p.expense %}<td>{{ money(v) }}</td>{% endfor %}</tr>
+    <tr><th class="sticky">{{ t('budget.total_savings') }}</th>{% for v in p.savings %}<td>{{ money(v) }}</td>{% endfor %}</tr>
+    <tr class="balance"><th class="sticky">{{ t('budget.balance') }}</th>{% for v in p.balance %}<td class="{{ p.alerts[loop.index0] }}">{{ money(v) }}</td>{% endfor %}</tr>
+    <tr class="alerts"><th class="sticky">{{ t('budget.alert') }}</th>{% for a in p.alerts %}<td class="{{ a }}">{{ t('alert.' ~ a) if a }}</td>{% endfor %}</tr>
+    <tr><th class="sticky">{{ t('budget.savings_total') }}</th>{% for v in p.savings_total %}<td>{{ money(v) }}</td>{% endfor %}</tr>
+  </tbody>
+  {% if p.groups %}
+  <tbody class="groups">
+    {% for g in p.groups|sort %}
+    <tr><th class="sticky">{{ t('budget.group_month', group=g) }}</th>{% for v in p.groups[g] %}<td class="{{ 'neg' if v < 0 }}">{{ money(v) }}</td>{% endfor %}</tr>
+    <tr><th class="sticky">{{ t('budget.group_ytd', group=g) }}</th>{% for v in p.groups_ytd[g] %}<td class="{{ 'neg' if v < 0 }}">{{ money(v) }}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+  {% endif %}
+</table>
+</div>
+<p class="legend">
+  <span class="swatch override"></span> {{ t('budget.legend_override') }}
+  <span class="swatch paid"></span> {{ t('budget.legend_paid') }}
+  <span class="swatch warning"></span> {{ t('budget.legend_warning', amount=money(s.safety_threshold)) }}
+  <span class="swatch overdraft"></span> {{ t('budget.legend_overdraft') }}
+</p>
+{% endblock %}

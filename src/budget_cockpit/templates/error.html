@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ t('error.title') }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>{{ t('error.title') }}</h1>
+  <p>{{ message }}</p>
+  <p><a class="button" href="/budget">{{ t('error.back') }}</a></p>
+</section>
+{% endblock %}

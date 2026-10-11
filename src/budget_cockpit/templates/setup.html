@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ t('setup.title') }}{% endblock %}
+{% block mainclass %}auth{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-brand"><img src="/static/favicon.svg" alt="" width="44" height="44"><h1>Budget Cockpit</h1></div>
+  <p class="muted">{{ t('setup.intro') }}</p>
+  <form method="post" action="/setup" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>{{ t('login.username') }}<input name="username" value="{{ username or '' }}" autocomplete="username" maxlength="40" required autofocus></label>
+    <label><span>{{ t('login.password') }} <span class="muted">({{ t('setup.min_length', n=min_length) }})</span></span>
+      <input name="password" type="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <label>{{ t('setup.password2') }}<input name="password2" type="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <label>{{ t('settings.locale') }}
+      <select name="lang">
+        <option value="fr" {{ 'selected' if lang == 'fr' }}>Français</option>
+        <option value="en" {{ 'selected' if lang == 'en' }}>English</option>
+      </select></label>
+    <label class="check"><input type="checkbox" name="demo"> {{ t('setup.demo') }}</label>
+    <button class="primary">{{ t('setup.submit') }}</button>
+  </form>
+</div>
+{% endblock %}

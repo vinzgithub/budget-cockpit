@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.lines') }}{% endblock %}
+{% block content %}
+<div class="head-row">
+  <h1>{{ t('nav.lines') }}</h1>
+  <a class="button primary" href="/lines/new">+ {{ t('lines.add') }}</a>
+</div>
+<p class="muted">{{ t('lines.intro') }}</p>
+{% for kind, lines in sections %}
+<section class="panel">
+  <div class="head-row"><h2>{{ t('kind.' ~ kind ~ '_plural') }}</h2><a class="add" href="/lines/new?kind={{ kind }}">+ {{ t('lines.add') }}</a></div>
+  {% if lines %}
+  <table class="list">
+    <thead><tr><th>{{ t('line.name') }}</th><th>{{ t('line.group') }}</th><th>{{ t('lines.rule') }}</th><th class="num">{{ t('lines.actions') }}</th></tr></thead>
+    <tbody>
+    {% for line in lines %}
+      <tr class="{{ 'inactive' if not line.active }}">
+        <td><a href="/lines/{{ line.id }}/edit">{{ line.name }}</a>{% if not line.active %} <span class="tag muted">{{ t('line.inactive') }}</span>{% endif %}</td>
+        <td>{% if line.group %}<span class="tag">{{ line.group }}</span>{% endif %}</td>
+        <td>
+          {%- if line.frequency == 'monthly' -%}{{ t('rule.monthly', amount=money(line.amount)) }}
+          {%- elif line.frequency == 'yearly' -%}{{ t('rule.yearly', amount=money(line.amount), month=t('month.' ~ line.month)) }}
+          {%- elif line.frequency == 'profile' -%}{{ t('rule.profile', total=money(line.profile|sum)) }}
+          {%- elif line.frequency == 'yearly_table' -%}{{ t('rule.yearly_table', n=line.yearly_table|length) }}
+          {%- else -%}{{ t('rule.manual') }}{%- endif -%}
+          {%- if line.start or line.end %} <span class="muted">· {% if line.start %}{{ t('rule.from', month=month(line.start)) }}{% endif %} {% if line.end %}{{ t('rule.until', month=month(line.end)) }}{% endif %}</span>{% endif %}
+        </td>
+        <td class="num actions">
+          <form method="post" action="/lines/{{ line.id }}/move" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="icon" name="direction" value="up" title="{{ t('lines.up') }}" {{ 'disabled' if loop.first }}>↑</button>
+            <button class="icon" name="direction" value="down" title="{{ t('lines.down') }}" {{ 'disabled' if loop.last }}>↓</button>
+          </form>
+          <a class="button small" href="/lines/{{ line.id }}/edit">{{ t('lines.edit') }}</a>
+          <form method="post" action="/lines/{{ line.id }}/delete" class="inline" data-confirm="{{ t('lines.confirm_delete', name=line.name) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="button small danger">{{ t('lines.delete') }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">{{ t('lines.empty') }}</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}
