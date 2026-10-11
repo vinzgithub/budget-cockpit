@@ -2,7 +2,7 @@
 
 🇫🇷 [Version française](INSTALLATION.fr.md)
 
-Budget Cockpit is a single small container (about 60 MB of RAM). It stores everything in one SQLite file under `/data`.
+Budget Cockpit is a single small container (about 60 MB of RAM). It stores everything in SQLite files under `/data`: `budget_cockpit.db` for the accounts, and `budgets/user-<id>.db` for each person's budget.
 
 > **Keep it private.** Budget Cockpit holds your financial data. Run it on your local network or behind a VPN (WireGuard, Tailscale…). Do not expose it directly to the Internet.
 
@@ -14,7 +14,7 @@ curl -fsSLO https://raw.githubusercontent.com/vinzgithub/budget-cockpit/main/doc
 docker compose up -d
 ```
 
-Open `http://<your-server>:8080`. The first visit asks you to create the only account — there is no default password.
+Open `http://<your-server>:8080`. The first visit asks you to create the administrator account — there is no default password. Create the other accounts in **Admin**: each gets its own budget.
 
 The provided [`docker-compose.yml`](../../docker-compose.yml) already runs Budget Cockpit hardened: non-root user, read-only filesystem, no Linux capabilities, `no-new-privileges`.
 
@@ -61,13 +61,16 @@ BUDGET_COCKPIT_DATA_DIR=/var/lib/budget-cockpit /opt/budget-cockpit/bin/uvicorn 
 ## Backups
 
 - **From the interface**: Settings → Backup → Export (JSON). Import restores everything.
-- **The volume**: back up the `budget-cockpit-data` volume (`budget_cockpit.db`, plus `budget_cockpit.db-wal` while running).
+- **From the interface**, each person exports their own budget; the administrator cannot export someone else's.
+- **The volume**: back up the whole `budget-cockpit-data` volume (`budget_cockpit.db` and the `budgets/` folder, plus the `-wal` files while running).
 
 ## Updating
 
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+**From 0.1 to 0.2**: on first start, the budget of version 0.1 moves into the first account's own database, and that account becomes the administrator. Export a JSON backup before updating, just in case.
 
 ## Forgot your password?
 

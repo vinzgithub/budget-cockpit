@@ -2,7 +2,7 @@
 
 🇬🇧 [English version](INSTALLATION.md)
 
-Budget Cockpit est un seul petit conteneur (environ 60 Mo de RAM). Il garde tout dans un fichier SQLite sous `/data`.
+Budget Cockpit est un seul petit conteneur (environ 60 Mo de RAM). Il garde tout dans des fichiers SQLite sous `/data` : `budget_cockpit.db` pour les comptes, et `budgets/user-<id>.db` pour le budget de chaque personne.
 
 > **Garde-le privé.** Budget Cockpit contient tes données financières. Fais-le tourner sur ton réseau local ou derrière un VPN (WireGuard, Tailscale…). Ne l'expose pas directement sur Internet.
 
@@ -14,7 +14,7 @@ curl -fsSLO https://raw.githubusercontent.com/vinzgithub/budget-cockpit/main/doc
 docker compose up -d
 ```
 
-Ouvre `http://<ton-serveur>:8080`. La première visite te demande de créer le seul compte : il n'y a pas de mot de passe par défaut.
+Ouvre `http://<ton-serveur>:8080`. La première visite te demande de créer le compte administrateur : il n'y a pas de mot de passe par défaut. Les autres comptes se créent ensuite dans **Admin**, chacun avec son propre budget.
 
 Le [`docker-compose.yml`](../../docker-compose.yml) fourni lance déjà Budget Cockpit de façon durcie : utilisateur non root, système de fichiers en lecture seule, aucune capacité Linux, `no-new-privileges`.
 
@@ -61,13 +61,16 @@ BUDGET_COCKPIT_DATA_DIR=/var/lib/budget-cockpit /opt/budget-cockpit/bin/uvicorn 
 ## Sauvegardes
 
 - **Depuis l'interface** : Paramètres → Sauvegarde → Exporter (JSON). L'import restaure tout.
-- **Le volume** : sauvegarde le volume `budget-cockpit-data` (`budget_cockpit.db`, plus `budget_cockpit.db-wal` pendant le fonctionnement).
+- **Depuis l'interface**, chacun exporte son propre budget ; l'administrateur ne peut pas exporter celui des autres.
+- **Le volume** : sauvegarde tout le volume `budget-cockpit-data` (`budget_cockpit.db` et le dossier `budgets/`, plus les fichiers `-wal` pendant le fonctionnement).
 
 ## Mise à jour
 
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+**De la 0.1 à la 0.2** : au premier démarrage, le budget de la version 0.1 passe dans la base personnelle du premier compte, qui devient administrateur. Exporte une sauvegarde JSON avant la mise à jour, par précaution.
 
 ## Mot de passe oublié ?
 

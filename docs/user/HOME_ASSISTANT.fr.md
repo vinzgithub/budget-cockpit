@@ -6,7 +6,7 @@ Budget Cockpit tourne à côté de Home Assistant (pas dedans) et expose une **A
 
 ## 1. Créer une clé
 
-Dans Budget Cockpit : **Paramètres → Home Assistant et API → Créer une clé**. Copie-la tout de suite : elle n'est affichée qu'une fois.
+Dans Budget Cockpit : **Paramètres → Home Assistant et API → Créer une clé**. Copie-la tout de suite : elle n'est affichée qu'une fois. Une clé lit le budget du compte qui l'a créée : avec plusieurs comptes, chacun crée la sienne.
 
 ## 2. La ranger dans `secrets.yaml`
 

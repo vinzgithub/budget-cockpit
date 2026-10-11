@@ -6,7 +6,7 @@ Budget Cockpit runs next to Home Assistant (not inside it) and exposes a **read-
 
 ## 1. Create a key
 
-In Budget Cockpit: **Settings → Home Assistant and API → Create a key**. Copy the key immediately: it is shown only once.
+In Budget Cockpit: **Settings → Home Assistant and API → Create a key**. Copy the key immediately: it is shown only once. A key reads the budget of the account that created it: with several accounts, each person creates their own.
 
 ## 2. Store it in `secrets.yaml`
 

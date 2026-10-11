@@ -7,17 +7,28 @@ Budget Cockpit est volontairement petit : une application FastAPI rendue côté 
 ```
 src/budget_cockpit/
 ├── engine.py     moteur de projection pur (sans entrées/sorties) — le cœur de Budget Cockpit
-├── store.py      stockage SQLite, validation, import/export JSON
+├── store.py      stockage SQLite (comptes, un budget par utilisateur), validation, import/export JSON
 ├── app.py        routes FastAPI, sessions, CSRF, API
 ├── security.py   hachage scrypt, TOTP et codes de secours, clés, CSRF, limitation des connexions
 ├── i18n.py       catalogues fr/en, formatage des montants et des mois
 ├── config.py     variables d'environnement, clé de session
-├── cli.py        réinitialisation du mot de passe, désactivation de la double authentification
+├── cli.py        mot de passe, double authentification, rôle administrateur
 ├── locales/      fr.json, en.json
 ├── templates/    pages Jinja2
 ├── static/       app.css, app.js, favicon.svg
 └── data/         données d'exemple (fictives) en fr et en
 ```
+
+## Stockage
+
+```
+/data/
+├── budget_cockpit.db      comptes, rôles, double authentification, clés d'API   (store.Accounts)
+├── budgets/user-<id>.db   un budget par compte                                  (store.Store)
+└── .secret_key           clé de signature des sessions
+```
+
+Chaque route du budget prend la base de l'utilisateur connecté (`require_budget`) : la requête d'un utilisateur n'ouvre jamais le fichier d'un autre. L'organisation de la 0.1 (un seul budget dans `budget_cockpit.db`) est migrée au démarrage : copiée dans le fichier du premier compte, vérifiée, puis supprimée.
 
 ## Le modèle
 

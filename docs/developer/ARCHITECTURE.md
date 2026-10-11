@@ -7,17 +7,28 @@ Budget Cockpit is deliberately small: a server-rendered FastAPI app, SQLite, and
 ```
 src/budget_cockpit/
 ├── engine.py     pure projection engine (no I/O) — the heart of Budget Cockpit
-├── store.py      SQLite storage, validation, JSON import/export
+├── store.py      SQLite storage (accounts, one budget per user), validation, JSON import/export
 ├── app.py        FastAPI routes, sessions, CSRF, API
 ├── security.py   scrypt hashing, TOTP and recovery codes, tokens, CSRF helpers, login throttle
 ├── i18n.py       fr/en catalogues, money and month formatting
 ├── config.py     environment variables, session key
-├── cli.py        reset-password, disable-totp
+├── cli.py        reset-password, disable-totp, make-admin
 ├── locales/      fr.json, en.json
 ├── templates/    Jinja2 pages
 ├── static/       app.css, app.js, favicon.svg
 └── data/         demo data (fictional) in fr and en
 ```
+
+## Storage
+
+```
+/data/
+├── budget_cockpit.db      accounts, roles, 2FA, API keys          (store.Accounts)
+├── budgets/user-<id>.db   one budget per account                  (store.Store)
+└── .secret_key           session signing key
+```
+
+Every budget route takes the store of the signed-in user (`require_budget`), so one user's request never opens another user's file. The 0.1 layout (one budget inside `budget_cockpit.db`) is migrated on start: copied to the first account's file, checked, then dropped.
 
 ## The model
 
