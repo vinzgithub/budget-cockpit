@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-10-11
+
+- The projected total savings now sit right under the savings lines in the budget grid (they used to be at the very bottom), so each planned transfer shows its effect immediately. A negative amount on a savings line is a withdrawal back to the current account.
+
 ## 0.1.0 — 2026-10-11
 
 First public version.
