@@ -6,10 +6,13 @@ Run with:  uvicorn --factory budget_cockpit.app:create_app
 from __future__ import annotations
 
 import json
+import re
+import time
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import segno
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__
 from .config import Config, secret_key
-from .engine import KINDS, close_month, project, yearly_summary
+from .engine import KINDS, Settings, close_month, project, yearly_summary
 from .i18n import LOCALES, fmt_money, fmt_month, pick_locale, plain_amount, t
 from .security import (
     MIN_PASSWORD_LENGTH,
@@ -28,11 +31,19 @@ from .security import (
     csrf_token,
     csrf_valid,
     hash_password,
+    is_totp_code,
+    new_recovery_codes,
     new_token,
+    new_totp_secret,
+    recovery_code_hash,
     token_hash,
+    totp_match,
+    totp_uri,
     verify_password,
 )
 from .store import (
+    Accounts,
+    Budgets,
     Store,
     ValidationError,
     line_from_dict,
@@ -44,6 +55,10 @@ from .store import (
 
 BASE = Path(__file__).parent
 MAX_IMPORT_BYTES = 2 * 1024 * 1024
+# Time allowed between the right password and the authenticator code.
+MFA_PENDING_SECONDS = 300
+# After an administrator retypes the password, the admin pages stay open this long.
+ADMIN_CONFIRM_SECONDS = 600
 
 
 class NeedSetup(Exception):
@@ -51,6 +66,14 @@ class NeedSetup(Exception):
 
 
 class NeedLogin(Exception):
+    pass
+
+
+class NeedPasswordChange(Exception):
+    pass
+
+
+class NeedAdminConfirm(Exception):
     pass
 
 
@@ -85,12 +108,14 @@ def parse_yearly_table(text: str) -> dict[str, str]:
 
 def create_app(config: Config | None = None) -> FastAPI:
     config = config or Config.from_env()
-    store = Store(config.db_path)
+    accounts = Accounts(config.db_path, config.budget_path)
+    budgets = Budgets(config.budget_path)
     throttle = LoginThrottle()
     templates = Jinja2Templates(directory=BASE / "templates")
 
     app = FastAPI(title="Budget Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.store = store
+    app.state.accounts = accounts
+    app.state.budgets = budgets
     app.state.config = config
     app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
@@ -114,27 +139,85 @@ def create_app(config: Config | None = None) -> FastAPI:
     )
 
     # ------------------------------------------------------------- helpers
-    def settings_now():
+    def settings_of(store: Store) -> Settings:
         return store.get_settings(current_month(), config.default_locale)
+
+    def user_of(request: Request):
+        uid = request.session.get("uid")
+        if not uid:
+            return None
+        # A password change or a change of two-factor settings signs out every other browser.
+        if request.session.get("epoch", "0") != accounts.session_epoch(uid):
+            return None
+        return accounts.get_user(uid)
 
     def lang_of(request: Request) -> str:
         lang = request.session.get("lang")
         if lang in LOCALES:
             return lang
-        if store.get_meta("settings"):
-            return settings_now().locale
+        user = user_of(request)
+        if user is not None:
+            return settings_of(budgets.get(user["id"])).locale
         return pick_locale(request.headers.get("accept-language"), config.default_locale)
 
-    def user_of(request: Request):
-        uid = request.session.get("uid")
-        return store.get_user(uid) if uid else None
+    def sign_in(request: Request, user_id: int) -> None:
+        store = budgets.get(user_id)
+        lang = settings_of(store).locale if store.get_meta("settings") else lang_of(request)
+        request.session.clear()
+        request.session["uid"] = user_id
+        request.session["epoch"] = accounts.session_epoch(user_id)
+        request.session["lang"] = lang
 
-    def require_user(request: Request):
-        if store.user_count() == 0:
+    def sign_out_other_browsers(request: Request, user_id: int) -> None:
+        request.session["epoch"] = accounts.new_session_epoch(user_id)
+
+    def client_key(request: Request) -> str:
+        return request.client.host if request.client else "unknown"
+
+    def check_second_factor(user_id: int, code: str) -> str | None:
+        """'totp' or 'recovery' when ``code`` is valid (and now used up), else None."""
+        row = accounts.get_totp(user_id)
+        if row is None or not row["enabled_at"]:
+            return None
+        if is_totp_code(code):
+            step = totp_match(row["secret"], code, row["last_step"])
+            if step is None:
+                return None
+            accounts.set_totp_last_step(user_id, step)
+            return "totp"
+        if code.strip() and accounts.use_recovery_code(user_id, recovery_code_hash(code)):
+            return "recovery"
+        return None
+
+    def pending_login(request: Request):
+        """The user who gave the right password and still has to type a code."""
+        uid = request.session.get("mfa_uid")
+        started = request.session.get("mfa_at", 0)
+        if not uid or not 0 <= time.time() - started <= MFA_PENDING_SECONDS:
+            return None
+        return accounts.get_user(uid)
+
+    def require_user(request: Request, allow_password_change: bool = False):
+        if accounts.user_count() == 0:
             raise NeedSetup()
         user = user_of(request)
         if user is None:
             raise NeedLogin()
+        if user["must_change_password"] and not allow_password_change:
+            raise NeedPasswordChange()
+        return user
+
+    def require_budget(request: Request):
+        """The signed-in user and their own budget database."""
+        user = require_user(request)
+        return user, budgets.get(user["id"])
+
+    def require_admin(request: Request, confirmed: bool = True):
+        user = require_user(request)
+        if not user["is_admin"]:
+            raise StarletteHTTPException(403)
+        if confirmed and request.session.get("admin_until", 0) < time.time():
+            raise NeedAdminConfirm()
         return user
 
     def check_csrf(request: Request, form=None) -> None:
@@ -149,9 +232,10 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     def render(request: Request, name: str, status: int = 200, **ctx) -> HTMLResponse:
         lang = lang_of(request)
-        s = settings_now()
+        user = user_of(request)
+        s = settings_of(budgets.get(user["id"])) if user else Settings(start_month=current_month(), locale=lang)
         context = dict(
-            lang=lang, settings=s, version=__version__, user=user_of(request),
+            lang=lang, settings=s, version=__version__, user=user,
             csrf=csrf_token(request.session), flashes=request.session.pop("flash", []),
             t=lambda key, **kw: t(lang, key, **kw),
             money=lambda v, d=2: fmt_money(v, lang, s.currency, d),
@@ -171,6 +255,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({"error": t(lang_of(request), err.key) + (f" ({err.detail})" if err.detail else "")},
                             status_code=status)
 
+    def new_password_error(password: str, password2) -> str | None:
+        if len(password) < MIN_PASSWORD_LENGTH:
+            return "error.password_short"
+        if password != password2:
+            return "error.password_mismatch"
+        return None
+
+    def start_budget(user_id: int, lang: str, demo: bool) -> None:
+        """A new user's budget: the demo household, or empty settings in their language."""
+        store = budgets.get(user_id)
+        if demo:
+            data = json.loads((BASE / "data" / f"demo.{lang}.json").read_text(encoding="utf-8"))
+            data["settings"]["start_month"] = current_month()
+            data["settings"]["locale"] = lang
+            store.import_data(data)
+        else:
+            store.save_settings(Settings(start_month=current_month(), locale=lang))
+
     # ---------------------------------------------------------- exceptions
     @app.exception_handler(NeedSetup)
     async def _need_setup(request: Request, exc: NeedSetup):
@@ -184,6 +286,16 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"error": "login required"}, status_code=401)
         return redirect("/login")
 
+    @app.exception_handler(NeedPasswordChange)
+    async def _need_password_change(request: Request, exc: NeedPasswordChange):
+        if wants_json(request) or request.headers.get("x-csrf-token") is not None:
+            return JSONResponse({"error": "password change required"}, status_code=403)
+        return redirect("/account/password")
+
+    @app.exception_handler(NeedAdminConfirm)
+    async def _need_admin_confirm(request: Request, exc: NeedAdminConfirm):
+        return redirect("/admin/confirm")
+
     @app.exception_handler(CsrfError)
     async def _csrf(request: Request, exc: CsrfError):
         if request.headers.get("x-csrf-token") is not None or wants_json(request):
@@ -194,8 +306,8 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def _http(request: Request, exc: StarletteHTTPException):
         if request.url.path.startswith("/api/"):
             return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
-        return render(request, "error.html", status=exc.status_code,
-                      message=t(lang_of(request), "error.not_found" if exc.status_code == 404 else "error.generic"))
+        key = {404: "error.not_found", 403: "error.forbidden"}.get(exc.status_code, "error.generic")
+        return render(request, "error.html", status=exc.status_code, message=t(lang_of(request), key))
 
     # ------------------------------------------------------------- health
     @app.get("/healthz")
@@ -210,13 +322,13 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/setup")
     async def setup_page(request: Request):
-        if store.user_count() > 0:
+        if accounts.user_count() > 0:
             return redirect("/login")
         return render(request, "setup.html", min_length=MIN_PASSWORD_LENGTH)
 
     @app.post("/setup")
     async def setup_submit(request: Request):
-        if store.user_count() > 0:
+        if accounts.user_count() > 0:
             return redirect("/login")
         form = await request.form()
         check_csrf(request, form)
@@ -225,29 +337,15 @@ def create_app(config: Config | None = None) -> FastAPI:
         lang = str(form.get("lang", "fr"))
         lang = lang if lang in LOCALES else "fr"
         request.session["lang"] = lang
-        error = None
-        if not 1 <= len(username) <= 40:
-            error = "error.username"
-        elif len(password) < MIN_PASSWORD_LENGTH:
-            error = "error.password_short"
-        elif password != form.get("password2"):
-            error = "error.password_mismatch"
+        error = "error.username" if not 1 <= len(username) <= 40 else new_password_error(password,
+                                                                                         form.get("password2"))
         if error:
             return render(request, "setup.html", status=400, error=t(lang, error, n=MIN_PASSWORD_LENGTH),
                           min_length=MIN_PASSWORD_LENGTH, username=username)
-        uid = store.create_user(username, hash_password(password))
-        if form.get("demo"):
-            demo = json.loads((BASE / "data" / f"demo.{lang}.json").read_text(encoding="utf-8"))
-            demo["settings"]["start_month"] = current_month()
-            demo["settings"]["locale"] = lang
-            store.import_data(demo)
-        else:
-            s = settings_now()
-            s.locale = lang
-            store.save_settings(s)
-        request.session.clear()
-        request.session["uid"] = uid
-        request.session["lang"] = lang
+        # The first account administers the others.
+        uid = accounts.create_user(username, hash_password(password), is_admin=True)
+        start_budget(uid, lang, bool(form.get("demo")))
+        sign_in(request, uid)
         if form.get("demo"):
             return redirect("/budget")
         flash(request, "info", "flash.welcome")
@@ -255,7 +353,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/login")
     async def login_page(request: Request):
-        if store.user_count() == 0:
+        if accounts.user_count() == 0:
             return redirect("/setup")
         return render(request, "login.html")
 
@@ -263,18 +361,53 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def login_submit(request: Request):
         form = await request.form()
         check_csrf(request, form)
-        key = request.client.host if request.client else "unknown"
+        key = client_key(request)
         lang = lang_of(request)
         if throttle.locked(key):
             return render(request, "login.html", status=429, error=t(lang, "error.locked"))
-        user = store.get_user_by_name(str(form.get("username", "")).strip())
+        user = accounts.get_user_by_name(str(form.get("username", "")).strip())
         if user is None or not verify_password(str(form.get("password", "")), user["pw_hash"]):
             throttle.failure(key)
             return render(request, "login.html", status=401, error=t(lang, "error.login"))
+        if accounts.totp_enabled(user["id"]):
+            # Right password, the code comes next. The throttle is not reset here, so wrong
+            # codes and wrong passwords add up: retyping the password does not buy more tries.
+            request.session.clear()
+            request.session["mfa_uid"] = user["id"]
+            request.session["mfa_at"] = int(time.time())
+            request.session["lang"] = lang
+            return redirect("/login/code")
         throttle.success(key)
-        request.session.clear()
-        request.session["uid"] = user["id"]
-        request.session["lang"] = lang
+        sign_in(request, user["id"])
+        return redirect("/budget")
+
+    @app.get("/login/code")
+    async def login_code_page(request: Request):
+        if pending_login(request) is None:
+            return redirect("/login")
+        return render(request, "login_code.html")
+
+    @app.post("/login/code")
+    async def login_code_submit(request: Request):
+        form = await request.form()
+        check_csrf(request, form)
+        key = client_key(request)
+        lang = lang_of(request)
+        user = pending_login(request)
+        if user is None:
+            request.session.pop("mfa_uid", None)
+            flash(request, "error", "error.code_expired")
+            return redirect("/login")
+        if throttle.locked(key):
+            return render(request, "login_code.html", status=429, error=t(lang, "error.locked"))
+        used = check_second_factor(user["id"], str(form.get("code", "")))
+        if used is None:
+            throttle.failure(key)
+            return render(request, "login_code.html", status=401, error=t(lang, "error.code"))
+        throttle.success(key)
+        sign_in(request, user["id"])
+        if used == "recovery":
+            flash(request, "warn", "flash.recovery_used", n=accounts.recovery_codes_left(user["id"]))
         return redirect("/budget")
 
     @app.post("/logout")
@@ -296,11 +429,42 @@ def create_app(config: Config | None = None) -> FastAPI:
         back = str(form.get("back", "/budget"))
         return redirect(back if back.startswith("/") and not back.startswith("//") else "/budget")
 
+    # A new account, or a password reset by an administrator: the user picks their own password.
+    @app.get("/account/password")
+    async def account_password_page(request: Request):
+        user = require_user(request, allow_password_change=True)
+        if not user["must_change_password"]:
+            return redirect("/budget")
+        return render(request, "account_password.html", min_length=MIN_PASSWORD_LENGTH)
+
+    @app.post("/account/password")
+    async def account_password(request: Request):
+        user = require_user(request, allow_password_change=True)
+        form = await request.form()
+        check_csrf(request, form)
+        if not user["must_change_password"]:
+            return redirect("/budget")
+        lang = lang_of(request)
+        new = str(form.get("new", ""))
+        error = new_password_error(new, form.get("new2"))
+        if error is None and verify_password(new, user["pw_hash"]):
+            error = "error.password_same"
+        if error:
+            return render(request, "account_password.html", status=400, min_length=MIN_PASSWORD_LENGTH,
+                          error=t(lang, error, n=MIN_PASSWORD_LENGTH))
+        accounts.set_password(user["id"], hash_password(new), must_change=False)
+        sign_out_other_browsers(request, user["id"])
+        flash(request, "ok", "flash.password_set")
+        if not budgets.get(user["id"]).list_lines():  # empty budget: start with the balances
+            flash(request, "info", "flash.welcome")
+            return redirect("/settings")
+        return redirect("/budget")
+
     # -------------------------------------------------------------- budget
     @app.get("/budget")
     async def budget(request: Request):
-        require_user(request)
-        s = settings_now()
+        _, store = require_budget(request)
+        s = settings_of(store)
         lines = store.list_lines()
         p = project(s, lines, store.list_overrides())
         sections = [(kind, [ln for ln in lines if ln.kind == kind]) for kind in KINDS]
@@ -317,7 +481,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/budget/cell")
     async def budget_cell(request: Request):
-        require_user(request)
+        _, store = require_budget(request)
         check_csrf(request)
         try:
             data = await _json_body(request)
@@ -338,23 +502,26 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/budget/balance")
     async def budget_balance(request: Request):
-        require_user(request)
+        _, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         try:
             value = parse_amount(form.get("current_balance"))
+            savings = parse_amount(form.get("savings_balance"), allow_empty=True)
         except ValidationError as e:
             flash(request, "error", e.key)
             return redirect("/budget")
-        s = settings_now()
+        s = settings_of(store)
         s.current_balance = value
+        if savings is not None:
+            s.savings_balance = savings
         store.save_settings(s)
         flash(request, "ok", "flash.balance_saved")
         return redirect("/budget")
 
     @app.post("/budget/paid")
     async def budget_paid(request: Request):
-        require_user(request)
+        _, store = require_budget(request)
         check_csrf(request)
         try:
             data = await _json_body(request)
@@ -376,33 +543,33 @@ def create_app(config: Config | None = None) -> FastAPI:
     # --------------------------------------------------------------- lines
     @app.get("/lines")
     async def lines_page(request: Request):
-        require_user(request)
+        _, store = require_budget(request)
         lines = store.list_lines()
         sections = [(kind, [ln for ln in lines if ln.kind == kind]) for kind in KINDS]
         return render(request, "lines.html", sections=sections)
 
-    def _groups() -> list[str]:
+    def _groups(store: Store) -> list[str]:
         return sorted({ln.group for ln in store.list_lines() if ln.group})
 
     @app.get("/lines/new")
     async def line_new(request: Request, kind: str = "expense"):
-        require_user(request)
+        _, store = require_budget(request)
         from .engine import Line
         line = Line(0, "", kind if kind in KINDS else "expense")
-        return render(request, "line_form.html", line=line, groups=_groups(), table_text="")
+        return render(request, "line_form.html", line=line, groups=_groups(store), table_text="")
 
     @app.get("/lines/{line_id}/edit")
     async def line_edit(request: Request, line_id: int):
-        require_user(request)
+        _, store = require_budget(request)
         line = store.get_line(line_id)
         if line is None:
             raise StarletteHTTPException(404)
         table_text = "\n".join(f"{y} = {plain_amount(v)}" for y, v in sorted(line.yearly_table.items()))
-        return render(request, "line_form.html", line=line, groups=_groups(), table_text=table_text)
+        return render(request, "line_form.html", line=line, groups=_groups(store), table_text=table_text)
 
     @app.post("/lines/save")
     async def line_save(request: Request):
-        require_user(request)
+        _, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         line_id = int(form.get("id") or 0)
@@ -426,7 +593,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             draft.group = str(data["group"] or "")
             draft.frequency = str(data["frequency"] or "monthly")
             draft.note = str(data["note"] or "")
-            return render(request, "line_form.html", status=400, line=draft, groups=_groups(),
+            return render(request, "line_form.html", status=400, line=draft, groups=_groups(store),
                           table_text=table_text, raw=data,
                           error=t(lang_of(request), e.key) + (f" ({e.detail})" if e.detail else ""))
         store.save_line(line)
@@ -435,7 +602,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/lines/{line_id}/delete")
     async def line_delete(request: Request, line_id: int):
-        require_user(request)
+        _, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         line = store.get_line(line_id)
@@ -446,7 +613,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/lines/{line_id}/move")
     async def line_move(request: Request, line_id: int):
-        require_user(request)
+        _, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         store.move_line(line_id, -1 if form.get("direction") == "up" else 1)
@@ -455,26 +622,27 @@ def create_app(config: Config | None = None) -> FastAPI:
     # ------------------------------------------------------------- summary
     @app.get("/summary")
     async def summary(request: Request):
-        require_user(request)
-        s = settings_now()
+        _, store = require_budget(request)
+        s = settings_of(store)
         p = project(s, store.list_lines(), store.list_overrides())
         return render(request, "summary.html", years=yearly_summary(p), groups=sorted(p.groups))
 
     # ------------------------------------------------------------ settings
-    def settings_page(request: Request, status: int = 200, **ctx):
-        s = settings_now()
+    def settings_page(request: Request, user, store: Store, status: int = 200, **ctx):
+        s = settings_of(store)
         p = project(s, store.list_lines(), store.list_overrides())
-        return render(request, "settings.html", status=status, s=s, p=p,
-                      tokens=store.list_tokens(), **ctx)
+        mfa = accounts.totp_enabled(user["id"])
+        return render(request, "settings.html", status=status, s=s, p=p, tokens=accounts.list_tokens(user["id"]),
+                      mfa_enabled=mfa, recovery_left=accounts.recovery_codes_left(user["id"]) if mfa else 0, **ctx)
 
     @app.get("/settings")
     async def settings_get(request: Request):
-        require_user(request)
-        return settings_page(request)
+        user, store = require_budget(request)
+        return settings_page(request, user, store)
 
     @app.post("/settings")
     async def settings_post(request: Request):
-        require_user(request)
+        user, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         data = {k: form.get(k) for k in ("start_month", "horizon", "current_balance", "savings_balance",
@@ -484,7 +652,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             s = settings_from_dict(data)
         except (ValidationError, ValueError) as e:
             key = e.key if isinstance(e, ValidationError) else "error.horizon"
-            return settings_page(request, status=400, error=t(lang_of(request), key))
+            return settings_page(request, user, store, status=400, error=t(lang_of(request), key))
         store.save_settings(s)
         request.session["lang"] = s.locale
         flash(request, "ok", "flash.settings_saved")
@@ -492,15 +660,15 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/settings/close-month")
     async def settings_close(request: Request):
-        require_user(request)
+        user, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         try:
             balance = parse_amount(form.get("balance"), allow_empty=True)
             savings = parse_amount(form.get("savings"), allow_empty=True)
         except ValidationError as e:
-            return settings_page(request, status=400, error=t(lang_of(request), e.key))
-        s = settings_now()
+            return settings_page(request, user, store, status=400, error=t(lang_of(request), e.key))
+        s = settings_of(store)
         closed = s.start_month
         new, kept = close_month(s, store.list_lines(), store.list_overrides(), balance, savings)
         store.save_settings(new)
@@ -508,83 +676,312 @@ def create_app(config: Config | None = None) -> FastAPI:
         flash(request, "ok", "flash.month_closed", month=fmt_month(closed, lang_of(request), long=True))
         return redirect("/budget")
 
+    def check_password_again(request: Request, user, password: str) -> str | None:
+        """Translation key of the error, or None. Throttled like the login page."""
+        key = client_key(request)
+        if throttle.locked(key):
+            return "error.locked"
+        if not verify_password(password, user["pw_hash"]):
+            throttle.failure(key)
+            return "error.password_current"
+        return None
+
     @app.post("/settings/password")
     async def settings_password(request: Request):
-        user = require_user(request)
+        user, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         lang = lang_of(request)
         new = str(form.get("new", ""))
-        if not verify_password(str(form.get("current", "")), user["pw_hash"]):
-            return settings_page(request, status=400, error=t(lang, "error.password_current"))
-        if len(new) < MIN_PASSWORD_LENGTH:
-            return settings_page(request, status=400, error=t(lang, "error.password_short", n=MIN_PASSWORD_LENGTH))
-        if new != form.get("new2"):
-            return settings_page(request, status=400, error=t(lang, "error.password_mismatch"))
-        store.set_password(user["id"], hash_password(new))
+        error = check_password_again(request, user, str(form.get("current", ""))) or new_password_error(
+            new, form.get("new2"))
+        if error:
+            return settings_page(request, user, store, status=400, error=t(lang, error, n=MIN_PASSWORD_LENGTH))
+        accounts.set_password(user["id"], hash_password(new))
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
         flash(request, "ok", "flash.password_changed")
         return redirect("/settings")
 
+    # ------------------------------------------- two-factor authentication
+    def totp_setup_page(request: Request, user, status: int = 200, **ctx):
+        row = accounts.get_totp(user["id"])
+        secret = row["secret"]
+        qr = segno.make(totp_uri(secret, user["username"]), error="m")
+        return render(request, "totp_setup.html", status=status,
+                      qr=qr.svg_data_uri(scale=5, border=3, dark="#14213d", light="#ffffff"),
+                      secret_groups=[secret[i:i + 4] for i in range(0, len(secret), 4)], **ctx)
+
+    def check_password_and_code(request: Request, user, form) -> str | None:
+        """Password and authenticator (or recovery) code, both required to change 2FA settings."""
+        error = check_password_again(request, user, str(form.get("password", "")))
+        if error:
+            return error
+        if check_second_factor(user["id"], str(form.get("code", ""))) is None:
+            throttle.failure(client_key(request))
+            return "error.code"
+        return None
+
+    @app.post("/settings/totp/setup")
+    async def totp_setup(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if not accounts.totp_enabled(user["id"]):
+            accounts.start_totp_setup(user["id"], new_totp_secret())
+        return redirect("/settings/totp")
+
+    @app.get("/settings/totp")
+    async def totp_setup_get(request: Request):
+        user = require_user(request)
+        row = accounts.get_totp(user["id"])
+        if row is None or row["enabled_at"]:
+            return redirect("/settings#mfa")
+        return totp_setup_page(request, user)
+
+    @app.post("/settings/totp/enable")
+    async def totp_enable(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        lang = lang_of(request)
+        row = accounts.get_totp(user["id"])
+        if row is None or row["enabled_at"]:
+            return redirect("/settings#mfa")
+        error = check_password_again(request, user, str(form.get("password", "")))
+        step = None if error else totp_match(row["secret"], str(form.get("code", "")), 0)
+        if error or step is None:
+            if not error:
+                throttle.failure(client_key(request))
+            return totp_setup_page(request, user, status=400, error=t(lang, error or "error.code_setup"))
+        codes = new_recovery_codes()
+        accounts.enable_totp(user["id"], step, [recovery_code_hash(c) for c in codes])
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
+        # Shown once, directly in this response: only their hashes are stored.
+        return render(request, "totp_codes.html", codes=codes, just_enabled=True)
+
+    @app.post("/settings/totp/codes")
+    async def totp_new_codes(request: Request):
+        user, store = require_budget(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if not accounts.totp_enabled(user["id"]):
+            return redirect("/settings#mfa")
+        error = check_password_and_code(request, user, form)
+        if error:
+            return settings_page(request, user, store, status=400, error=t(lang_of(request), error))
+        codes = new_recovery_codes()
+        accounts.replace_recovery_codes(user["id"], [recovery_code_hash(c) for c in codes])
+        throttle.success(client_key(request))
+        return render(request, "totp_codes.html", codes=codes, just_enabled=False)
+
+    @app.post("/settings/totp/disable")
+    async def totp_disable(request: Request):
+        user, store = require_budget(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if accounts.get_totp(user["id"]) is None:
+            return redirect("/settings#mfa")
+        if not accounts.totp_enabled(user["id"]):  # setup cancelled before the first code
+            accounts.disable_totp(user["id"])
+            return redirect("/settings#mfa")
+        error = check_password_and_code(request, user, form)
+        if error:
+            return settings_page(request, user, store, status=400, error=t(lang_of(request), error))
+        accounts.disable_totp(user["id"])
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
+        flash(request, "ok", "flash.totp_disabled")
+        return redirect("/settings#mfa")
+
+    # ------------------------------------------------------------ API keys
     @app.post("/settings/token")
     async def settings_token(request: Request):
-        require_user(request)
+        user, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         name = str(form.get("name", "")).strip()[:60] or "Home Assistant"
         token = new_token()
-        store.add_token(name, token_hash(token))
+        accounts.add_token(user["id"], name, token_hash(token))
         # Shown once, directly in this response: never stored in clear, never put in the cookie.
-        return settings_page(request, new_token=token, new_token_name=name)
+        return settings_page(request, user, store, new_token=token, new_token_name=name)
 
     @app.post("/settings/token/{token_id}/revoke")
     async def settings_token_revoke(request: Request, token_id: int):
-        require_user(request)
+        user = require_user(request)
         form = await request.form()
         check_csrf(request, form)
-        store.revoke_token(token_id)
+        accounts.revoke_token(user["id"], token_id)
         flash(request, "ok", "flash.token_revoked")
         return redirect("/settings#api")
 
+    # -------------------------------------------------------------- backup
     @app.get("/settings/export")
     async def settings_export(request: Request):
-        require_user(request)
-        data = store.export_data(settings_now())
-        filename = f"budget-cockpit-backup-{date.today().isoformat()}.json"
+        user, store = require_budget(request)
+        data = store.export_data(settings_of(store))
+        who = re.sub(r"[^A-Za-z0-9_-]+", "-", user["username"]).strip("-") or "user"
+        filename = f"budget-cockpit-backup-{who}-{date.today().isoformat()}.json"
         return Response(json.dumps(data, ensure_ascii=False, indent=2), media_type="application/json",
                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     @app.post("/settings/import")
     async def settings_import(request: Request):
-        require_user(request)
+        user, store = require_budget(request)
         form = await request.form()
         check_csrf(request, form)
         lang = lang_of(request)
         upload = form.get("file")
         if not isinstance(upload, UploadFile):
-            return settings_page(request, status=400, error=t(lang, "error.import_format"))
+            return settings_page(request, user, store, status=400, error=t(lang, "error.import_format"))
         raw = await upload.read(MAX_IMPORT_BYTES + 1)
         if len(raw) > MAX_IMPORT_BYTES:
-            return settings_page(request, status=400, error=t(lang, "error.import_size"))
+            return settings_page(request, user, store, status=400, error=t(lang, "error.import_size"))
         try:
             data = json.loads(raw.decode("utf-8"))
             s = store.import_data(data)
         except (ValueError, UnicodeDecodeError) as e:
             key = e.key if isinstance(e, ValidationError) else "error.import_format"
             detail = f" ({e.detail})" if isinstance(e, ValidationError) and e.detail else ""
-            return settings_page(request, status=400, error=t(lang, key) + detail)
+            return settings_page(request, user, store, status=400, error=t(lang, key) + detail)
         request.session["lang"] = s.locale
         flash(request, "ok", "flash.imported")
         return redirect("/budget")
+
+    # --------------------------------------------------------------- admin
+    # Administrators manage accounts. They never see anyone else's budget.
+    @app.get("/admin/confirm")
+    async def admin_confirm_page(request: Request):
+        require_admin(request, confirmed=False)
+        return render(request, "admin_confirm.html")
+
+    @app.post("/admin/confirm")
+    async def admin_confirm(request: Request):
+        user = require_admin(request, confirmed=False)
+        form = await request.form()
+        check_csrf(request, form)
+        error = check_password_again(request, user, str(form.get("password", "")))
+        if error:
+            return render(request, "admin_confirm.html", status=400, error=t(lang_of(request), error))
+        throttle.success(client_key(request))
+        request.session["admin_until"] = int(time.time()) + ADMIN_CONFIRM_SECONDS
+        return redirect("/admin")
+
+    def admin_page(request: Request, me, status: int = 200, **ctx):
+        return render(request, "admin.html", status=status, me=me, users=accounts.list_users(),
+                      min_length=MIN_PASSWORD_LENGTH, **ctx)
+
+    @app.get("/admin")
+    async def admin_home(request: Request):
+        return admin_page(request, require_admin(request))
+
+    @app.post("/admin/users")
+    async def admin_create_user(request: Request):
+        me = require_admin(request)
+        form = await request.form()
+        check_csrf(request, form)
+        lang_ui = lang_of(request)
+        username = str(form.get("username", "")).strip()
+        password = str(form.get("password", ""))
+        lang = str(form.get("lang", lang_ui))
+        lang = lang if lang in LOCALES else lang_ui
+        if not 1 <= len(username) <= 40:
+            error = "error.username"
+        elif accounts.username_taken(username):
+            error = "error.username_taken"
+        else:
+            error = new_password_error(password, form.get("password2"))
+        if error:
+            return admin_page(request, me, status=400, error=t(lang_ui, error, n=MIN_PASSWORD_LENGTH),
+                              draft={"username": username, "lang": lang, "is_admin": bool(form.get("is_admin")),
+                                     "demo": bool(form.get("demo"))})
+        uid = accounts.create_user(username, hash_password(password), is_admin=bool(form.get("is_admin")),
+                                   must_change_password=True)
+        start_budget(uid, lang, bool(form.get("demo")))
+        flash(request, "ok", "flash.user_created", name=username)
+        return redirect("/admin")
+
+    def admin_target(me, user_id: int, allow_self: bool = False):
+        target = accounts.get_user(user_id)
+        if target is None:
+            raise StarletteHTTPException(404)
+        if target["id"] == me["id"] and not allow_self:
+            raise StarletteHTTPException(400)
+        return target
+
+    @app.get("/admin/users/{user_id}")
+    async def admin_user_page(request: Request, user_id: int):
+        me = require_admin(request)
+        target = admin_target(me, user_id, allow_self=True)
+        return render(request, "admin_user.html", me=me, target=target, totp_on=accounts.totp_enabled(user_id),
+                      min_length=MIN_PASSWORD_LENGTH)
+
+    @app.post("/admin/users/{user_id}/password")
+    async def admin_reset_password(request: Request, user_id: int):
+        me = require_admin(request)
+        form = await request.form()
+        check_csrf(request, form)
+        target = admin_target(me, user_id)
+        password = str(form.get("password", ""))
+        error = new_password_error(password, form.get("password2"))
+        if error:
+            return render(request, "admin_user.html", status=400, me=me, target=target,
+                          totp_on=accounts.totp_enabled(user_id), min_length=MIN_PASSWORD_LENGTH,
+                          error=t(lang_of(request), error, n=MIN_PASSWORD_LENGTH))
+        accounts.set_password(user_id, hash_password(password), must_change=True)
+        accounts.new_session_epoch(user_id)
+        flash(request, "ok", "flash.user_password_reset", name=target["username"])
+        return redirect(f"/admin/users/{user_id}")
+
+    @app.post("/admin/users/{user_id}/totp-off")
+    async def admin_totp_off(request: Request, user_id: int):
+        me = require_admin(request)
+        form = await request.form()
+        check_csrf(request, form)
+        target = admin_target(me, user_id)
+        accounts.disable_totp(user_id)
+        accounts.new_session_epoch(user_id)
+        flash(request, "ok", "flash.user_totp_off", name=target["username"])
+        return redirect(f"/admin/users/{user_id}")
+
+    @app.post("/admin/users/{user_id}/role")
+    async def admin_role(request: Request, user_id: int):
+        me = require_admin(request)
+        form = await request.form()
+        check_csrf(request, form)
+        target = admin_target(me, user_id)
+        accounts.set_admin(user_id, not target["is_admin"])
+        flash(request, "ok", "flash.user_admin_off" if target["is_admin"] else "flash.user_admin_on",
+              name=target["username"])
+        return redirect(f"/admin/users/{user_id}")
+
+    @app.post("/admin/users/{user_id}/delete")
+    async def admin_delete(request: Request, user_id: int):
+        me = require_admin(request)
+        form = await request.form()
+        check_csrf(request, form)
+        target = admin_target(me, user_id)
+        if str(form.get("confirm", "")).strip() != target["username"]:
+            return render(request, "admin_user.html", status=400, me=me, target=target,
+                          totp_on=accounts.totp_enabled(user_id), min_length=MIN_PASSWORD_LENGTH,
+                          error=t(lang_of(request), "error.confirm_username"))
+        accounts.delete_user(user_id)
+        budgets.delete(user_id)
+        flash(request, "ok", "flash.user_deleted", name=target["username"])
+        return redirect("/admin")
 
     # ----------------------------------------------------------------- API
     @app.get("/api/v1/summary")
     async def api_summary(request: Request):
         auth = request.headers.get("authorization", "")
         scheme, _, token = auth.partition(" ")
-        if scheme.lower() != "bearer" or not token or not store.check_token(token_hash(token.strip())):
+        uid = accounts.check_token(token_hash(token.strip())) if scheme.lower() == "bearer" and token else None
+        if uid is None:
             return JSONResponse({"error": "unauthorized"}, status_code=401,
                                 headers={"WWW-Authenticate": "Bearer"})
-        s = settings_now()
+        store = budgets.get(uid)
+        s = settings_of(store)
         p = project(s, store.list_lines(), store.list_overrides())
 
         def num(v: Decimal) -> float:

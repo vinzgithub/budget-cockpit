@@ -71,7 +71,7 @@ def test_demo_data_in_english(client):
 
 def test_projected_savings_sit_under_the_savings_lines(client):
     setup_account(client, demo=True)
-    store = client.app.state.store
+    store = client.app.state.budgets.get(1)
     month = store.get_settings("2026-10").start_month
     savings_line = next(line for line in store.list_lines() if line.kind == "savings")
     headers = {"X-CSRF-Token": page_csrf(client, "/budget")}
@@ -116,7 +116,7 @@ def test_login_success(client):
 def test_line_cell_override_and_paid(client):
     setup_account(client)
     assert add_line(client).status_code == 303
-    store = client.app.state.store
+    store = client.app.state.budgets.get(1)
     line = store.list_lines()[0]
     month = store.get_settings("2026-10").start_month
     headers = {"X-CSRF-Token": page_csrf(client, "/budget")}
@@ -133,12 +133,25 @@ def test_line_cell_override_and_paid(client):
     assert r.status_code == 200 and store.get_override(line.id, month) is None
 
 
-def test_update_balance_from_budget(client):
+def test_update_balances_from_budget(client):
     setup_account(client)
-    r = client.post("/budget/balance", data={"csrf": page_csrf(client, "/budget"), "current_balance": "2 500,75"},
-                    follow_redirects=False)
+    page = client.get("/budget").text
+    assert 'name="savings_balance"' in page
+    r = client.post("/budget/balance", data={"csrf": csrf_of(page), "current_balance": "2 500,75",
+                                             "savings_balance": "6 568,24"}, follow_redirects=False)
     assert r.status_code == 303
-    assert str(client.app.state.store.get_settings("2026-10").current_balance) == "2500.75"
+    s = client.app.state.budgets.get(1).get_settings("2026-10")
+    assert (str(s.current_balance), str(s.savings_balance)) == ("2500.75", "6568.24")
+    # without the savings field (older page still open), the savings stay as they are
+    client.post("/budget/balance", data={"csrf": page_csrf(client, "/budget"), "current_balance": "10"})
+    s = client.app.state.budgets.get(1).get_settings("2026-10")
+    assert (str(s.current_balance), str(s.savings_balance)) == ("10", "6568.24")
+
+
+def test_settings_show_the_situation_before_month_closing(client):
+    setup_account(client)
+    html = client.get("/settings").text
+    assert html.index('id="situation"') < html.index('id="close"')
 
 
 def test_line_validation_error_is_shown(client):
@@ -151,7 +164,7 @@ def test_yearly_table_line(client):
     setup_account(client)
     r = add_line(client, name="Tax provision", frequency="yearly_table", yearly_table="2027 = 1201\n2028: 1500")
     assert r.status_code == 303
-    line = client.app.state.store.list_lines()[0]
+    line = client.app.state.budgets.get(1).list_lines()[0]
     assert {k: str(v) for k, v in line.yearly_table.items()} == {2027: "1201", 2028: "1500"}
 
 
@@ -180,7 +193,7 @@ def test_export_import_roundtrip(client, tmp_path):
                        files={"file": ("backup.json", json.dumps(data), "application/json")},
                        follow_redirects=False)
         assert r.status_code == 303
-        assert len(other.app.state.store.list_lines()) == 17
+        assert len(other.app.state.budgets.get(1).list_lines()) == 17
 
 
 def test_import_accepts_backups_from_before_the_rename(client):
@@ -192,7 +205,7 @@ def test_import_accepts_backups_from_before_the_rename(client):
                     files={"file": ("old.json", json.dumps(legacy), "application/json")},
                     follow_redirects=False)
     assert r.status_code == 303
-    assert [line.name for line in client.app.state.store.list_lines()] == ["Rent"]
+    assert [line.name for line in client.app.state.budgets.get(1).list_lines()] == ["Rent"]
 
 
 def test_import_rejects_garbage(client):
@@ -204,7 +217,7 @@ def test_import_rejects_garbage(client):
 
 def test_close_month(client):
     setup_account(client)
-    store = client.app.state.store
+    store = client.app.state.budgets.get(1)
     before = store.get_settings("2026-10").start_month
     r = client.post("/settings/close-month", data={"csrf": page_csrf(client), "balance": "1 000", "savings": ""},
                     follow_redirects=False)

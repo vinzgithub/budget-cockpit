@@ -96,10 +96,12 @@
     if (td && !td.querySelector("input")) startEdit(td);
   });
 
-  // Confirmation for destructive forms: <form data-confirm="...">
+  // Confirmation for destructive forms: <form data-confirm="..."> or <button data-confirm="...">
   document.addEventListener("submit", function (ev) {
     const form = ev.target;
-    if (form.dataset && form.dataset.confirm && !window.confirm(form.dataset.confirm)) ev.preventDefault();
+    const button = ev.submitter;
+    const message = (button && button.dataset && button.dataset.confirm) || (form.dataset && form.dataset.confirm);
+    if (message && !window.confirm(message)) ev.preventDefault();
   });
 
   // Line form: only show the fields used by the chosen frequency.

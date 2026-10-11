@@ -101,6 +101,16 @@ La synthèse donne, par année et par mois, les rentrées, les dépenses, l'épa
 
 ---
 
+## 👥 Un serveur, un budget chacun
+
+Budget Cockpit peut servir à tout le foyer, ou à quelques proches : chaque compte a **son propre budget, dans sa propre base**.
+
+- Le premier compte est administrateur. Il crée les autres avec un mot de passe provisoire, que chacun remplace par le sien à sa première connexion
+- L'administrateur gère les comptes (mot de passe, double authentification, rôles, suppression), mais ne voit jamais le budget des autres
+- Chacun a ses propres paramètres, sauvegardes et clés Home Assistant
+
+---
+
 ## 🏠 Pensé pour Home Assistant
 
 Budget Cockpit tourne à côté de Home Assistant et expose une **API en lecture seule, protégée par une clé**. En quelques lignes de YAML, Home Assistant récupère :
@@ -141,8 +151,10 @@ Guide complet, avec un conteneur LXC Proxmox et un reverse proxy : [docs/user/IN
 
 ## 🔒 Sécurisé par défaut
 
-- Pas de mot de passe par défaut : la première visite crée le seul compte
+- Pas de mot de passe par défaut : la première visite crée le compte administrateur
+- Une base SQLite par compte : les budgets restent séparés, et les administrateurs ne peuvent pas les ouvrir
 - Mots de passe hachés avec scrypt, limitation des tentatives de connexion, protection CSRF sur chaque formulaire
+- Double authentification en option : un code d'application d'authentification (TOTP) après le mot de passe, avec des codes de secours à usage unique
 - Content-Security-Policy stricte, aucun script, police ou traceur externe — Budget Cockpit n'appelle jamais Internet
 - Clés d'API affichées une seule fois et conservées uniquement sous forme d'empreinte
 - Utilisateur non root, conteneur en lecture seule
@@ -153,7 +165,7 @@ Détails et signalement : [SECURITY.md](SECURITY.md).
 
 ## 💾 Tes données
 
-Tout tient dans un seul fichier SQLite dans `/data`. La page **Paramètres** exporte et importe une sauvegarde JSON. Rien n'est jamais envoyé ailleurs.
+Tout tient dans des fichiers SQLite dans `/data` : un pour les comptes, et un par personne pour son budget. La page **Paramètres** exporte et importe le budget de chacun en JSON. Rien n'est jamais envoyé ailleurs.
 
 ---
 

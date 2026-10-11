@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ target['username'] }} · {{ t('admin.title') }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/admin">← {{ t('admin.back') }}</a></p>
+<h1>{{ target['username'] }}</h1>
+<p class="muted">
+  {{ t('admin.role_admin') if target['is_admin'] else t('admin.role_user') }}
+  · {{ t('mfa.title') }} : {{ t('mfa.status_on') if totp_on else t('admin.off') }}
+  · {{ t('admin.created') }} {{ target['created_at'][:10] }}
+</p>
+
+{% if target['id'] == me['id'] %}
+<section class="panel"><p>{{ t('admin.self_note') }} <a href="/settings">{{ t('nav.settings') }}</a></p></section>
+{% else %}
+
+<section class="panel" id="password">
+  <h2>{{ t('admin.reset_title') }}</h2>
+  <p class="muted">{{ t('admin.reset_help') }}</p>
+  <form method="post" action="/admin/users/{{ target['id'] }}/password" class="form-grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label><span>{{ t('admin.temp_password') }} <span class="muted">({{ t('setup.min_length', n=min_length) }})</span></span>
+      <input type="password" name="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <label>{{ t('setup.password2') }}
+      <input type="password" name="password2" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <div class="span2 buttons"><button class="button">{{ t('admin.reset_submit') }}</button></div>
+  </form>
+</section>
+
+{% if totp_on %}
+<section class="panel" id="mfa">
+  <h2>{{ t('mfa.title') }}</h2>
+  <p class="muted">{{ t('admin.totp_help') }}</p>
+  <form method="post" action="/admin/users/{{ target['id'] }}/totp-off" class="inline"
+        data-confirm="{{ t('admin.totp_confirm', name=target['username']) }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="button">{{ t('admin.totp_off') }}</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel" id="role">
+  <h2>{{ t('admin.role') }}</h2>
+  <p class="muted">{{ t('admin.role_help') }}</p>
+  <form method="post" action="/admin/users/{{ target['id'] }}/role" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="button">{{ t('admin.remove_admin') if target['is_admin'] else t('admin.make_admin_button') }}</button>
+  </form>
+</section>
+
+<section class="panel danger-zone" id="delete">
+  <h2>{{ t('admin.delete_title') }}</h2>
+  <p class="muted">{{ t('admin.delete_help') }}</p>
+  <form method="post" action="/admin/users/{{ target['id'] }}/delete" class="inline-form"
+        data-confirm="{{ t('admin.delete_confirm', name=target['username']) }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="confirm" autocomplete="off" placeholder="{{ target['username'] }}"
+           aria-label="{{ t('admin.delete_type', name=target['username']) }}" required>
+    <button class="button danger">{{ t('admin.delete_submit') }}</button>
+  </form>
+  <p class="hint">{{ t('admin.delete_type', name=target['username']) }}</p>
+</section>
+{% endif %}
+{% endblock %}

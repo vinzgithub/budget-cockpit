@@ -24,7 +24,12 @@ class Config:
 
     @property
     def db_path(self) -> Path:
+        """Accounts: users, roles, two-factor authentication, API keys."""
         return self.data_dir / "budget_cockpit.db"
+
+    def budget_path(self, user_id: int) -> Path:
+        """One database per user for their budget."""
+        return self.data_dir / "budgets" / f"user-{int(user_id)}.db"
 
     @classmethod
     def from_env(cls) -> Config:

@@ -101,6 +101,16 @@ The yearly summary shows income, expenses, planned savings and your **real savin
 
 ---
 
+## 👥 One server, one budget each
+
+Budget Cockpit can serve the whole household, or a few relatives: each account has **its own budget, in its own database**.
+
+- The first account is the administrator. It creates the others with a temporary password, which each person replaces with their own at first login
+- The administrator manages accounts (password reset, two-factor authentication, roles, deletion) but never sees anyone else's budget
+- Everyone has their own settings, backups and Home Assistant keys
+
+---
+
 ## 🏠 Built for Home Assistant
 
 Budget Cockpit runs on its own, next to Home Assistant, and exposes a **read-only API protected by a key**. In a few lines of YAML, Home Assistant gets:
@@ -141,8 +151,10 @@ Full guide, including a Proxmox LXC and a reverse proxy: [docs/user/INSTALLATION
 
 ## 🔒 Security by default
 
-- No default password: the first visit creates the only account
+- No default password: the first visit creates the administrator account
+- One SQLite database per account: budgets stay apart, and administrators cannot open them
 - Passwords hashed with scrypt, login throttling, CSRF protection on every form
+- Optional two-factor authentication: a code from an authenticator app (TOTP) after the password, with single-use recovery codes
 - Strict Content-Security-Policy, no external scripts, fonts or trackers — Budget Cockpit never calls the Internet
 - API keys shown once and stored only as a hash
 - Runs as a non-root user in a read-only container
@@ -153,7 +165,7 @@ Details and reporting: [SECURITY.md](SECURITY.md).
 
 ## 💾 Your data
 
-Everything lives in one SQLite file in `/data`. The **Settings** page exports and imports a JSON backup. Nothing is ever sent anywhere.
+Everything lives in SQLite files in `/data`: one for the accounts, and one per person for their budget. The **Settings** page exports and imports each person's budget as JSON. Nothing is ever sent anywhere.
 
 ---
 

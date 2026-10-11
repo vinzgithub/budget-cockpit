@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ t('admin.title') }}{% endblock %}
+{% block content %}
+<h1>{{ t('admin.title') }}</h1>
+<p class="muted">{{ t('admin.intro') }}</p>
+
+<section class="panel" id="users">
+  <h2>{{ t('admin.users') }}</h2>
+  <div class="table-scroll">
+  <table class="list">
+    <thead><tr><th>{{ t('login.username') }}</th><th>{{ t('admin.role') }}</th><th>{{ t('mfa.title') }}</th><th>{{ t('admin.created') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><strong>{{ u['username'] }}</strong>
+          {% if u['id'] == me['id'] %} <span class="tag">{{ t('admin.you') }}</span>{% endif %}
+          {% if u['must_change_password'] %} <span class="tag tag-warn">{{ t('admin.password_pending') }}</span>{% endif %}</td>
+        <td>{{ t('admin.role_admin') if u['is_admin'] else t('admin.role_user') }}</td>
+        <td>{% if u['totp_on'] %}<span class="tag tag-ok">{{ t('mfa.status_on') }}</span>{% else %}<span class="muted">{{ t('admin.off') }}</span>{% endif %}</td>
+        <td>{{ u['created_at'][:10] }}</td>
+        <td class="num">{% if u['id'] != me['id'] %}<a class="button small" href="/admin/users/{{ u['id'] }}">{{ t('admin.manage') }}</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel" id="new-user">
+  <h2>{{ t('admin.new_user') }}</h2>
+  <p class="muted">{{ t('admin.new_user_help') }}</p>
+  {% set d = draft or {} %}
+  <form method="post" action="/admin/users" class="form-grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>{{ t('login.username') }}
+      <input name="username" value="{{ d.username or '' }}" maxlength="40" autocomplete="off" required></label>
+    <label>{{ t('settings.locale') }}
+      <select name="lang">
+        <option value="fr" {{ 'selected' if (d.lang or lang) == 'fr' }}>Français</option>
+        <option value="en" {{ 'selected' if (d.lang or lang) == 'en' }}>English</option>
+      </select></label>
+    <label><span>{{ t('admin.temp_password') }} <span class="muted">({{ t('setup.min_length', n=min_length) }})</span></span>
+      <input type="password" name="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <label>{{ t('setup.password2') }}
+      <input type="password" name="password2" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+    <label class="check span2"><input type="checkbox" name="demo" {{ 'checked' if d.demo }}> {{ t('admin.demo') }}</label>
+    <label class="check span2"><input type="checkbox" name="is_admin" {{ 'checked' if d.is_admin }}> {{ t('admin.make_admin') }}</label>
+    <div class="span2 buttons"><button class="primary">{{ t('admin.create') }}</button></div>
+  </form>
+</section>
+{% endblock %}
