@@ -2,6 +2,7 @@
 
     python -m budget_cockpit.cli reset-password <username>
     python -m budget_cockpit.cli disable-totp <username>
+    python -m budget_cockpit.cli make-admin <username>
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import sys
 
 from .config import Config
 from .security import MIN_PASSWORD_LENGTH, hash_password
-from .store import Store
+from .store import Accounts
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,9 +23,12 @@ def main(argv: list[str] | None = None) -> int:
     reset.add_argument("username")
     totp = sub.add_parser("disable-totp", help="turn off two-factor authentication (lost phone and recovery codes)")
     totp.add_argument("username")
+    admin = sub.add_parser("make-admin", help="give an account the administrator role")
+    admin.add_argument("username")
     args = parser.parse_args(argv)
 
-    store = Store(Config.from_env().db_path)
+    config = Config.from_env()
+    store = Accounts(config.db_path, config.budget_path)
     user = store.get_user_by_name(args.username)
     if user is None:
         print(f"Unknown user: {args.username}", file=sys.stderr)
@@ -49,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
         store.new_session_epoch(user["id"])
         print("Two-factor authentication disabled. Every browser has been signed out.")
         print("Sign in with the password only, then turn it on again in Settings.")
+    elif args.command == "make-admin":
+        store.set_admin(user["id"], True)
+        print(f"{args.username} is now an administrator.")
     return 0
 
 

@@ -15,13 +15,17 @@
 {% if user %}
 <header class="topbar">
   <a class="brand" href="/budget"><img src="/static/favicon.svg" alt="" width="26" height="26"><span>Budget Cockpit</span></a>
+  {% if not user['must_change_password'] %}
   <nav class="nav">
     <a href="/budget" class="{{ 'active' if path.startswith('/budget') }}">{{ t('nav.budget') }}</a>
     <a href="/lines" class="{{ 'active' if path.startswith('/lines') }}">{{ t('nav.lines') }}</a>
     <a href="/summary" class="{{ 'active' if path.startswith('/summary') }}">{{ t('nav.summary') }}</a>
     <a href="/settings" class="{{ 'active' if path.startswith('/settings') }}">{{ t('nav.settings') }}</a>
+    {% if user['is_admin'] %}<a href="/admin" class="{{ 'active' if path.startswith('/admin') }}">{{ t('nav.admin') }}</a>{% endif %}
   </nav>
+  {% endif %}
   <div class="tools">
+    <span class="who" title="{{ t('nav.signed_in_as') }}">{{ user['username'] }}</span>
     <form method="post" action="/lang" class="inline">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="hidden" name="back" value="{{ path }}">

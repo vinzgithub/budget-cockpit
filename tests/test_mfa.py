@@ -1,6 +1,5 @@
 import base64
 import re
-import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,24 +15,6 @@ RFC_SECRET = base64.b32encode(b"12345678901234567890").decode()
 RFC_VECTORS = [(59, "94287082"), (1111111109, "07081804"), (1111111111, "14050471"),
                (1234567890, "89005924"), (2000000000, "69279037"), (20000000000, "65353130")]
 CODE_RE = re.compile(r"<code>([a-z2-9]{5}-[a-z2-9]{5})</code>")
-
-
-class Clock:
-    def __init__(self):
-        self.now = time.time()
-
-    def __call__(self):
-        return self.now
-
-    def advance(self, seconds):
-        self.now += seconds
-
-
-@pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(time, "time", c)
-    return c
 
 
 @pytest.fixture
@@ -57,7 +38,7 @@ def enable_mfa(client, clock):
     assert r.headers["location"] == "/settings/totp"
     page = client.get("/settings/totp")
     assert "data:image/svg+xml" in page.text
-    secret = client.app.state.store.get_totp(1)["secret"]
+    secret = client.app.state.accounts.get_totp(1)["secret"]
     assert secret.replace(" ", "")[:4] in page.text
     r = client.post("/settings/totp/enable",
                     data={"csrf": csrf_of(page.text), "code": code_now(secret, clock), "password": PASSWORD})
@@ -174,17 +155,17 @@ def test_wrong_codes_and_passwords_share_the_throttle(client, clock):
 def test_enable_requires_password_and_valid_code(client, clock):
     setup_account(client)
     client.post("/settings/totp/setup", data={"csrf": page_csrf(client)})
-    secret = client.app.state.store.get_totp(1)["secret"]
+    secret = client.app.state.accounts.get_totp(1)["secret"]
     token = page_csrf(client, "/settings/totp")
     r = client.post("/settings/totp/enable", data={"csrf": token, "code": "123456", "password": PASSWORD})
     assert r.status_code == 400 and "Vérifie que ton téléphone est à l&#39;heure" in r.text
     r = client.post("/settings/totp/enable",
                     data={"csrf": token, "code": code_now(secret, clock), "password": "wrong password"})
     assert r.status_code == 400
-    assert not client.app.state.store.totp_enabled(1)
+    assert not client.app.state.accounts.totp_enabled(1)
     # cancelling the setup removes the pending secret
     client.post("/settings/totp/disable", data={"csrf": token})
-    assert client.app.state.store.get_totp(1) is None
+    assert client.app.state.accounts.get_totp(1) is None
 
 
 def test_other_browsers_are_logged_out_when_2fa_is_turned_on(app, client, clock):
@@ -228,7 +209,7 @@ def test_new_recovery_codes_replace_the_old_ones(client, clock):
 def test_disable_requires_password_and_code(client, clock):
     setup_account(client)
     secret, codes = enable_mfa(client, clock)
-    store = client.app.state.store
+    store = client.app.state.accounts
     clock.advance(30)
     r = client.post("/settings/totp/disable", data={"csrf": page_csrf(client), "password": PASSWORD, "code": "000000"})
     assert r.status_code == 400 and store.totp_enabled(1)
@@ -248,7 +229,7 @@ def test_cli_disables_2fa(client, clock, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("BUDGET_COCKPIT_DATA_DIR", str(tmp_path))
     assert cli.main(["disable-totp", "vincent"]) == 0
     assert "disabled" in capsys.readouterr().out
-    assert not client.app.state.store.totp_enabled(1)
+    assert not client.app.state.accounts.totp_enabled(1)
     # every browser is logged out, then the password alone works
     assert client.get("/budget", follow_redirects=False).headers["location"] == "/login"
     assert log_in_password(client).headers["location"] == "/budget"
