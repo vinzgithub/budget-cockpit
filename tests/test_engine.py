@@ -116,3 +116,29 @@ def test_close_month_defaults_to_forecast():
     lines = [Line(1, "Salary", "income", amount=D("2000"))]
     new, _ = close_month(settings(), lines, [])
     assert new.current_balance == D("3000")
+
+
+# --------------------------------------------------------------- savings room
+def _projection_with(balances):
+    from budget_cockpit.engine import Projection
+    months = [f"2026-{m:02d}" if m <= 12 else f"2027-{m - 12:02d}" for m in range(10, 10 + len(balances))]
+    return Projection(months=months, cells={}, income=[], expense=[], savings=[],
+                      balance=[D(str(b)) for b in balances], savings_total=[], alerts=[], groups={},
+                      groups_ytd={})
+
+
+def test_savings_room_steps_follow_the_lowest_later_balance():
+    from budget_cockpit.engine import savings_room
+    p = _projection_with([140.32, 176.62, 692.92, 322.55, 262.19, 211.82, 591.45, 1241.09, 1180.72, 3343.35])
+    room = savings_room(p, D(100))
+    assert room.shortfall is None
+    assert [(m, int(v)) for m, v in room.steps] == [("2026-10", 40), ("2026-12", 111), ("2027-04", 491),
+                                                    ("2027-05", 1080)]
+
+
+def test_savings_room_shortfall_is_due_by_the_first_month_under_the_threshold():
+    from budget_cockpit.engine import savings_room
+    p = _projection_with([140.32, 176.62, 692.92, 90, 60, 41.82, 591.45])
+    room = savings_room(p, D(100))
+    assert (room.shortfall, room.deadline, room.lowest_month) == (D(59), "2027-01", "2027-03")
+    assert room.steps == []

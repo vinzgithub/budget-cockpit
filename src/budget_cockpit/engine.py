@@ -8,7 +8,7 @@ when values are displayed or exported, so long projections never drift.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 KINDS = ("income", "expense", "savings")
 FREQUENCIES = ("monthly", "yearly", "profile", "manual", "yearly_table")
@@ -243,6 +243,46 @@ def yearly_summary(p: Projection) -> list[YearSummary]:
         for g, values in p.groups.items():
             s.groups[g] = s.groups.get(g, ZERO) + values[i]
     return [out[y] for y in sorted(out)]
+
+
+# ------------------------------------------------------------- savings room
+@dataclass
+class SavingsRoom:
+    """How much more can go to savings without the account ever dropping under the threshold.
+
+    Either ``shortfall`` is set (the plan already goes under the threshold: that much is
+    missing, to be found by ``deadline``, the first month under it), or ``steps`` lists
+    (month, amount): the total that can be put aside, on top of what is planned, by that month.
+    """
+
+    shortfall: Decimal | None = None
+    deadline: str | None = None
+    lowest_month: str | None = None
+    steps: list[tuple[str, Decimal]] = field(default_factory=list)
+
+
+def savings_room(p: Projection, threshold: Decimal, months: int = 12, max_steps: int = 4) -> SavingsRoom:
+    n = len(p.months)
+    if n == 0:
+        return SavingsRoom()
+    lowest = min(range(n), key=lambda k: p.balance[k])
+    if p.balance[lowest] < threshold:
+        first = next(k for k in range(n) if p.balance[k] < threshold)
+        missing = (threshold - p.balance[lowest]).quantize(Decimal(1), rounding=ROUND_CEILING)
+        return SavingsRoom(shortfall=missing, deadline=p.months[first], lowest_month=p.months[lowest])
+    # Money moved to savings in month i lowers every later balance: what can leave by
+    # month i is the smallest balance from i to the end of the forecast, minus the threshold.
+    suffix_min = list(p.balance)
+    for k in range(n - 2, -1, -1):
+        suffix_min[k] = min(suffix_min[k], suffix_min[k + 1])
+    steps: list[tuple[str, Decimal]] = []
+    for i in range(min(months, n)):
+        room = (suffix_min[i] - threshold).quantize(Decimal(1), rounding=ROUND_FLOOR)
+        if room < 1:
+            continue
+        if not steps or room - steps[-1][1] >= max(Decimal(50), steps[-1][1] / 10):
+            steps.append((p.months[i], room))
+    return SavingsRoom(steps=steps[:max_steps])
 
 
 # ------------------------------------------------------------------ month end

@@ -10,6 +10,7 @@ src/budget_cockpit/
 ├── store.py      SQLite storage (accounts, one budget per user), validation, JSON import/export
 ├── app.py        FastAPI routes, sessions, CSRF, API
 ├── security.py   scrypt hashing, TOTP and recovery codes, tokens, CSRF helpers, login throttle
+├── charts.py     SVG charts drawn on the server (no JavaScript library)
 ├── i18n.py       fr/en catalogues, money and month formatting
 ├── config.py     environment variables, session key
 ├── cli.py        reset-password, disable-totp, make-admin

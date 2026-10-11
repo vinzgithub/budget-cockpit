@@ -96,6 +96,77 @@
     if (td && !td.querySelector("input")) startEdit(td);
   });
 
+  // Charts: one tooltip per chart, on hover and keyboard focus. Text only (textContent).
+  document.querySelectorAll(".chart").forEach(function (fig) {
+    const svg = fig.querySelector("svg");
+    if (!svg) return;
+    const tip = document.createElement("div");
+    tip.className = "chart-tip";
+    tip.hidden = true;
+    fig.appendChild(tip);
+    const cross = svg.querySelector(".crosshair");
+    const hasLine = !!svg.querySelector(".line");
+
+    function fill(data) {
+      tip.replaceChildren();
+      const title = document.createElement("div");
+      title.className = "tip-title";
+      title.textContent = data.t;
+      tip.appendChild(title);
+      data.rows.forEach(function (row) {
+        const line = document.createElement("div");
+        line.className = "tip-row";
+        const key = document.createElement("span");
+        const kind = row[0].indexOf("m-") === 0 ? "key-dot " : row[0].indexOf("b-") === 0 ? "key-bar " : "key-line ";
+        key.className = "key " + (row[0] ? kind + row[0] : "key-blank");
+        const value = document.createElement("strong");
+        value.textContent = row[2];
+        const label = document.createElement("span");
+        label.textContent = row[1];
+        line.append(key, value, label);
+        tip.appendChild(line);
+      });
+    }
+    function place(clientX, clientY) {
+      const box = fig.getBoundingClientRect();
+      let x = clientX - box.left + 14;
+      let y = clientY - box.top - tip.offsetHeight - 14;
+      if (x + tip.offsetWidth > box.width) x = clientX - box.left - tip.offsetWidth - 14;
+      if (y < 0) y = clientY - box.top + 18;
+      tip.style.left = Math.max(0, x) + "px";
+      tip.style.top = y + "px";
+    }
+    function show(hit, clientX, clientY) {
+      let data;
+      try { data = JSON.parse(hit.dataset.tip); } catch (e) { return; }
+      fill(data);
+      tip.hidden = false;
+      svg.querySelectorAll(".bar.on").forEach(function (b) { b.classList.remove("on"); });
+      svg.querySelectorAll('.bar[data-i="' + hit.dataset.i + '"]').forEach(function (b) { b.classList.add("on"); });
+      if (cross && hasLine) {
+        cross.setAttribute("x1", hit.dataset.x);
+        cross.setAttribute("x2", hit.dataset.x);
+        cross.classList.add("on");
+      }
+      place(clientX, clientY);
+    }
+    function hide() {
+      tip.hidden = true;
+      if (cross) cross.classList.remove("on");
+      svg.querySelectorAll(".bar.on").forEach(function (b) { b.classList.remove("on"); });
+    }
+    svg.querySelectorAll(".hit").forEach(function (hit) {
+      hit.addEventListener("pointerenter", function (ev) { show(hit, ev.clientX, ev.clientY); });
+      hit.addEventListener("pointermove", function (ev) { place(ev.clientX, ev.clientY); });
+      hit.addEventListener("pointerleave", hide);
+      hit.addEventListener("focus", function () {
+        const r = hit.getBoundingClientRect();
+        show(hit, r.left + r.width / 2, r.top + r.height / 3);
+      });
+      hit.addEventListener("blur", hide);
+    });
+  });
+
   // Confirmation for destructive forms: <form data-confirm="..."> or <button data-confirm="...">
   document.addEventListener("submit", function (ev) {
     const form = ev.target;

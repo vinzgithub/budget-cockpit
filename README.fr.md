@@ -4,14 +4,14 @@
 
 ### Sache chaque mois ce qu'il te restera sur ton compte
 
-**Prévision mois par mois · Alerte de découvert · Revenus saisonniers · Provisions d'impôt · Home Assistant**
+**Prévision mois par mois · Alerte de découvert · Courbes · Plusieurs comptes · Double authentification · Home Assistant**
 
 🇬🇧 [Read in English](README.md)
 
 <br>
 
-<img src="docs/images/fr/budget.png"
-     alt="Prévision budgétaire Budget Cockpit"
+<img src="docs/images/fr/hero.png"
+     alt="Budget Cockpit sur ordinateur et sur téléphone"
      width="100%">
 
 <sub>Les captures montrent un foyer fictif de démonstration : tous les chiffres sont des exemples et ne correspondent pas à la situation de l'auteur.</sub>
@@ -21,6 +21,23 @@
 **Auto-hébergé · Local d'abord · Bilingue (FR / EN) · Open source pour un usage non commercial**
 
 </div>
+
+---
+
+## 🚀 En bref
+
+<table>
+<tr>
+<td width="33%" valign="top"><b>🔮 Une prévision, pas un historique</b><br>Ce qu'il restera sur ton compte à la fin de chaque mois, jusqu'à dix ans à l'avance.</td>
+<td width="33%" valign="top"><b>🚨 Alerte de découvert</b><br>Un seuil de sécurité, le mois le plus serré, et ce qu'il manque pour rester au-dessus.</td>
+<td width="33%" valign="top"><b>📈 Des courbes utiles</b><br>Ton compte mois par mois, ton épargne, les mois qui te coûtent, l'année d'une maison louée.</td>
+</tr>
+<tr>
+<td valign="top"><b>👥 Un budget chacun</b><br>Plusieurs comptes, chacun avec sa propre base. L'administrateur ne voit jamais le budget des autres.</td>
+<td valign="top"><b>🔐 Double authentification</b><br>Un code d'application d'authentification après le mot de passe, et des codes de secours à usage unique.</td>
+<td valign="top"><b>🏠 Home Assistant</b><br>Une API en lecture seule : le reste en fin de mois et les alertes sur ton tableau de bord.</td>
+</tr>
+</table>
 
 ---
 
@@ -91,13 +108,27 @@ Dans le mois en cours, coche **✓** quand une dépense est payée ou une rentr�
 
 ---
 
+## 📈 Des courbes qui répondent à une question
+
+<img src="docs/images/fr/budget-chart.png"
+     alt="Le compte courant en fin de mois, face au seuil de sécurité"
+     width="100%">
+
+- **Ton compte courant, fin de mois** : quand tu passes sous ton seuil ou à découvert, et jusqu'où tu descends
+- **Ta marge d'épargne** : combien tu peux encore mettre de côté, et d'ici quand, sans passer sous le seuil — ou combien il te manque, et pour quand
+- Dans la synthèse : **ce que chaque mois ajoute ou retire à ton compte**, **ton épargne prévue** et le **résultat de chaque groupe** (une maison louée, par exemple) avec son cumul de l'année
+
+Survole ou touche un mois pour le détail. Les courbes sont dessinées par le serveur : rien n'est chargé depuis Internet.
+
+---
+
 ## 📊 Toute l'année d'un coup d'œil
 
 <img src="docs/images/fr/summary.png"
-     alt="Synthèse annuelle Budget Cockpit"
+     alt="Synthèse Budget Cockpit : ce que chaque mois ajoute ou retire au compte"
      width="100%">
 
-La synthèse donne, par année et par mois, les rentrées, les dépenses, l'épargne prévue et ta **capacité d'épargne réelle** — ainsi que le résultat de chaque groupe, par exemple une maison louée.
+La synthèse s'ouvre sur trois courbes — ce que chaque mois ajoute ou retire à ton compte, ton épargne prévue, et l'année de chaque groupe (une maison louée, par exemple) — puis le tableau année par année : rentrées, dépenses, épargne prévue et ta **capacité d'épargne réelle**, par an et par mois.
 
 ---
 
@@ -108,6 +139,10 @@ Budget Cockpit peut servir à tout le foyer, ou à quelques proches : chaque com
 - Le premier compte est administrateur. Il crée les autres avec un mot de passe provisoire, que chacun remplace par le sien à sa première connexion
 - L'administrateur gère les comptes (mot de passe, double authentification, rôles, suppression), mais ne voit jamais le budget des autres
 - Chacun a ses propres paramètres, sauvegardes et clés Home Assistant
+
+<img src="docs/images/fr/admin.png"
+     alt="Administration : comptes, rôles et double authentification"
+     width="100%">
 
 ---
 
@@ -141,7 +176,7 @@ volumes:
 docker compose up -d
 ```
 
-Ouvre `http://<ton-serveur>:8080`, crée ton compte, puis pars des données d'exemple ou saisis tes propres lignes.
+Ouvre `http://<ton-serveur>:8080`, crée le compte administrateur, puis pars des données d'exemple ou saisis tes propres lignes. Les autres comptes se créent dans **Admin**.
 
 Guide complet, avec un conteneur LXC Proxmox et un reverse proxy : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md).
 
@@ -158,6 +193,17 @@ Guide complet, avec un conteneur LXC Proxmox et un reverse proxy : [docs/user/IN
 - Content-Security-Policy stricte, aucun script, police ou traceur externe — Budget Cockpit n'appelle jamais Internet
 - Clés d'API affichées une seule fois et conservées uniquement sous forme d'empreinte
 - Utilisateur non root, conteneur en lecture seule
+
+<table>
+<tr>
+<td width="66%" valign="top"><img src="docs/images/fr/totp-setup.png" alt="Activer la double authentification avec un QR code"></td>
+<td width="34%" valign="top"><img src="docs/images/fr/login-code.png" alt="Le code demandé après le mot de passe, sur téléphone"></td>
+</tr>
+<tr>
+<td align="center"><b>La double authentification en un scan</b></td>
+<td align="center"><b>Le code demandé après le mot de passe</b></td>
+</tr>
+</table>
 
 Détails et signalement : [SECURITY.md](SECURITY.md).
 

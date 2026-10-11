@@ -41,6 +41,29 @@
   <button class="button">{{ t('budget.balance_update') }}</button>
   <span class="muted small">{{ t('budget.balance_hint') }}</span>
 </form>
+{% if chart %}
+<section class="panel chart-panel" id="chart">
+  <div class="chart-head">
+    <h2>{{ t('chart.balance_title') }}</h2>
+    {% set anchor = '#chart' %}{% include "_chart_range.html" %}
+  </div>
+  <ul class="chart-legend">
+    <li><span class="key key-line s-balance"></span>{{ t('budget.balance') }}</li>
+    <li><span class="key key-dash"></span>{{ t('chart.legend_threshold', amount=money(s.safety_threshold, 0)) }}</li>
+    <li><span class="key key-dot m-warning"></span>{{ t('chart.legend_warning') }}</li>
+    <li><span class="key key-diamond m-overdraft"></span>{{ t('chart.legend_overdraft') }}</li>
+  </ul>
+  <figure class="chart"><div class="chart-scroll">{{ chart }}</div></figure>
+  {% if room.shortfall is not none %}
+  <p class="room room-short">{{ t('chart.room_shortfall', threshold=money(s.safety_threshold, 0), amount=money(room.shortfall, 0), month=month(room.deadline, true)) }}</p>
+  {% elif room.steps %}
+  <p class="room">{{ t('chart.room_intro', threshold=money(s.safety_threshold, 0)) }}
+    {% for m, amount in room.steps %}<strong>{{ t('chart.room_now', amount=money(amount, 0)) if m == p.months[0] else t('chart.room_by', amount=money(amount, 0), month=month(m, true)) }}</strong>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  {% else %}
+  <p class="room">{{ t('chart.room_none', threshold=money(s.safety_threshold, 0)) }}</p>
+  {% endif %}
+</section>
+{% endif %}
 <p class="hint">{{ t('budget.hint') }}</p>
 
 <div class="grid-wrap" id="grid">

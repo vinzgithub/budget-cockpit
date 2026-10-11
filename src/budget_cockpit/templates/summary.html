@@ -2,6 +2,38 @@
 {% block title %}{{ t('nav.summary') }}{% endblock %}
 {% block content %}
 <h1>{{ t('nav.summary') }}</h1>
+{% if charts %}
+<div class="chart-filters">{% set anchor = '' %}{% include "_chart_range.html" %}</div>
+
+<section class="panel chart-panel">
+  <h2>{{ t('chart.flow_title') }}</h2>
+  <p class="muted small">{{ t('chart.flow_help') }}</p>
+  <ul class="chart-legend">
+    <li><span class="key key-bar b-pos"></span>{{ t('chart.legend_pos') }}</li>
+    <li><span class="key key-bar b-neg"></span>{{ t('chart.legend_neg') }}</li>
+  </ul>
+  <figure class="chart"><div class="chart-scroll">{{ charts.flow }}</div></figure>
+</section>
+
+<section class="panel chart-panel">
+  <h2>{{ t('chart.savings_title') }}</h2>
+  <p class="muted small">{{ t('chart.savings_help') }}</p>
+  <figure class="chart"><div class="chart-scroll">{{ charts.savings }}</div></figure>
+</section>
+
+{% for g, svg in charts.groups %}
+<section class="panel chart-panel">
+  <h2>{{ t('chart.group_title', group=g) }}</h2>
+  <p class="muted small">{{ t('chart.group_help') }}</p>
+  <ul class="chart-legend">
+    <li><span class="key key-bar b-pos"></span><span class="key key-bar b-neg"></span>{{ t('chart.month_result') }}</li>
+    <li><span class="key key-line s-cumul"></span>{{ t('chart.year_to_date') }}</li>
+  </ul>
+  <figure class="chart"><div class="chart-scroll">{{ svg }}</div></figure>
+</section>
+{% endfor %}
+<h2 class="section-title">{{ t('summary.by_year') }}</h2>
+{% endif %}
 <p class="muted">{{ t('summary.intro') }}</p>
 <section class="panel">
 <div class="grid-wrap">

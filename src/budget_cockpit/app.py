@@ -22,8 +22,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__
+from .charts import Fmt, balance_chart, flow_chart, group_chart, months_shown, savings_chart
 from .config import Config, secret_key
-from .engine import KINDS, Settings, close_month, project, yearly_summary
+from .engine import KINDS, Settings, close_month, project, savings_room, yearly_summary
 from .i18n import LOCALES, fmt_money, fmt_month, pick_locale, plain_amount, t
 from .security import (
     MIN_PASSWORD_LENGTH,
@@ -255,6 +256,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({"error": t(lang_of(request), err.key) + (f" ({err.detail})" if err.detail else "")},
                             status_code=status)
 
+    def chart_fmt(request: Request, s: Settings) -> Fmt:
+        lang = lang_of(request)
+        return Fmt(t=lambda key, **kw: t(lang, key, **kw),
+                   money=lambda v, d=2: fmt_money(v, lang, s.currency, d),
+                   month=lambda m, long=False: fmt_month(m, lang, long), lang=lang)
+
     def new_password_error(password: str, password2) -> str | None:
         if len(password) < MIN_PASSWORD_LENGTH:
             return "error.password_short"
@@ -468,7 +475,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         lines = store.list_lines()
         p = project(s, lines, store.list_overrides())
         sections = [(kind, [ln for ln in lines if ln.kind == kind]) for kind in KINDS]
-        return render(request, "budget.html", p=p, sections=sections, s=s)
+        shown, n = months_shown(request.query_params.get("mois"), len(p.months), "12")
+        chart = balance_chart(p, s.safety_threshold, n, chart_fmt(request, s)) if n else None
+        return render(request, "budget.html", p=p, sections=sections, s=s, chart=chart, shown=shown,
+                      room=savings_room(p, s.safety_threshold))
 
     async def _json_body(request: Request) -> dict:
         try:
@@ -625,7 +635,14 @@ def create_app(config: Config | None = None) -> FastAPI:
         _, store = require_budget(request)
         s = settings_of(store)
         p = project(s, store.list_lines(), store.list_overrides())
-        return render(request, "summary.html", years=yearly_summary(p), groups=sorted(p.groups))
+        shown, n = months_shown(request.query_params.get("mois"), len(p.months), "24")
+        fmt = chart_fmt(request, s)
+        charts = {}
+        if n:
+            charts = {"flow": flow_chart(p, n, fmt), "savings": savings_chart(p, n, fmt),
+                      "groups": [(g, group_chart(p, g, n, fmt)) for g in sorted(p.groups)]}
+        return render(request, "summary.html", years=yearly_summary(p), groups=sorted(p.groups), charts=charts,
+                      shown=shown)
 
     # ------------------------------------------------------------ settings
     def settings_page(request: Request, user, store: Store, status: int = 200, **ctx):
