@@ -95,6 +95,8 @@ You can add Budget Cockpit as a **Webpage** dashboard in Home Assistant. For the
 
 `GET /api/v1/summary` — header `Authorization: Bearer <key>`.
 
+Example response (made-up figures from the demo household):
+
 ```json
 {
   "currency": "EUR",

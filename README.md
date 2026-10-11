@@ -14,6 +14,8 @@
      alt="Budget Cockpit budget forecast"
      width="100%">
 
+<sub>The screenshots show a fictional demo household: every figure is an example and none of them are the author's own finances.</sub>
+
 <br><br>
 
 **Self-hosted · Local-first · Bilingual (FR / EN) · Open source for non-commercial use**
@@ -180,6 +182,8 @@ Commercial use, resale, paid redistribution, paid hosting, inclusion in a commer
 ## ℹ️ Disclaimer
 
 Budget Cockpit is a forecasting tool, not financial or tax advice. Forecasts are only as good as the amounts you enter.
+
+The figures in the screenshots and in the documentation come from the fictional demo household shipped with the app. They are examples only and do not reflect the author's finances.
 
 Home Assistant and other product or company names mentioned by this project remain the property of their respective owners.
 

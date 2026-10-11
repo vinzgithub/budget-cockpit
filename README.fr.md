@@ -14,6 +14,8 @@
      alt="Prévision budgétaire Budget Cockpit"
      width="100%">
 
+<sub>Les captures montrent un foyer fictif de démonstration : tous les chiffres sont des exemples et ne correspondent pas à la situation de l'auteur.</sub>
+
 <br><br>
 
 **Auto-hébergé · Local d'abord · Bilingue (FR / EN) · Open source pour un usage non commercial**
@@ -180,6 +182,8 @@ Tout usage commercial — revente, redistribution payante, hébergement payant, 
 ## ℹ️ Avertissement
 
 Budget Cockpit est un outil de prévision, pas un conseil financier ou fiscal. Une prévision ne vaut que par les montants saisis.
+
+Les chiffres des captures et de la documentation viennent du foyer fictif de démonstration fourni avec l'appli. Ce sont des exemples : ils ne reflètent pas la situation de l'auteur.
 
 Home Assistant et les autres noms de produits ou de sociétés cités restent la propriété de leurs détenteurs.
 
