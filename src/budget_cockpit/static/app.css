@@ -217,7 +217,16 @@ main.auth { min-height: 85vh; display: grid; place-items: center; padding: 1.25r
 }
 @media (max-width: 480px) {
   main.page { padding: .9rem; }
-  .cards { grid-template-columns: minmax(0, 1fr); }
+  /* phones: the four figures stay two by two, the balances form becomes two rows */
+  .cards { gap: .6rem; }
+  .card { padding: .65rem .8rem; }
+  .card-value { font-size: 1.2rem; }
+  .card-value.small { font-size: 1.05rem; }
+  .card-label, .card-sub { font-size: .78rem; }
+  .balance-form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .45rem .6rem; }
+  .balance-form label { font-size: .9rem; }
+  .balance-form input { width: 100%; }
+  .balance-form button, .balance-form span { grid-column: 1 / -1; }
   .list .actions { flex-wrap: wrap; }
 }
 

@@ -4,14 +4,14 @@
 
 ### Know what will be left on your account at the end of every month
 
-**Month-by-month forecast · Overdraft alerts · Seasonal income · Tax provisions · Home Assistant**
+**Month-by-month forecast · Overdraft alerts · Charts · Several accounts · Two-factor login · Home Assistant**
 
 🇫🇷 [Lire en français](README.fr.md)
 
 <br>
 
-<img src="docs/images/en/budget.png"
-     alt="Budget Cockpit budget forecast"
+<img src="docs/images/en/hero.png"
+     alt="Budget Cockpit on a computer and on a phone"
      width="100%">
 
 <sub>The screenshots show a fictional demo household: every figure is an example and none of them are the author's own finances.</sub>
@@ -21,6 +21,23 @@
 **Self-hosted · Local-first · Bilingual (FR / EN) · Open source for non-commercial use**
 
 </div>
+
+---
+
+## 🚀 At a glance
+
+<table>
+<tr>
+<td width="33%" valign="top"><b>🔮 A forecast, not a history</b><br>What will be left on your account at the end of every month, up to ten years ahead.</td>
+<td width="33%" valign="top"><b>🚨 Overdraft alerts</b><br>A safety threshold, the tightest month, and how much is missing to stay above it.</td>
+<td width="33%" valign="top"><b>📈 Charts that help</b><br>Your account month by month, your savings, the months that cost you, a rental property's year.</td>
+</tr>
+<tr>
+<td valign="top"><b>👥 One budget each</b><br>Several accounts, each with its own database. The administrator never sees the others' budgets.</td>
+<td valign="top"><b>🔐 Two-factor login</b><br>A code from an authenticator app after the password, and single-use recovery codes.</td>
+<td valign="top"><b>🏠 Home Assistant</b><br>A read-only API: the end-of-month balance and the alerts on your dashboard.</td>
+</tr>
+</table>
 
 ---
 
@@ -108,10 +125,10 @@ Hover or tap a month for the details. The charts are drawn by the server: nothin
 ## 📊 See the whole year
 
 <img src="docs/images/en/summary.png"
-     alt="Budget Cockpit yearly summary"
+     alt="Budget Cockpit summary: what each month adds to or takes from the account"
      width="100%">
 
-The yearly summary shows income, expenses, planned savings and your **real saving capacity** per year and per month — plus the net result of each group, for example a rental property.
+The summary opens with three charts — what each month adds to or takes from your account, your planned savings, and the year of each group (a rental property, say) — then the year-by-year table: income, expenses, planned savings and your **real saving capacity**, per year and per month.
 
 ---
 
@@ -122,6 +139,10 @@ Budget Cockpit can serve the whole household, or a few relatives: each account h
 - The first account is the administrator. It creates the others with a temporary password, which each person replaces with their own at first login
 - The administrator manages accounts (password reset, two-factor authentication, roles, deletion) but never sees anyone else's budget
 - Everyone has their own settings, backups and Home Assistant keys
+
+<img src="docs/images/en/admin.png"
+     alt="Administration: accounts, roles and two-factor status"
+     width="100%">
 
 ---
 
@@ -155,7 +176,7 @@ volumes:
 docker compose up -d
 ```
 
-Open `http://<your-server>:8080`, create your account, and either start from sample data or enter your own lines.
+Open `http://<your-server>:8080`, create the administrator account, and either start from sample data or enter your own lines. Other accounts are created in **Admin**.
 
 Full guide, including a Proxmox LXC and a reverse proxy: [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md).
 
@@ -172,6 +193,17 @@ Full guide, including a Proxmox LXC and a reverse proxy: [docs/user/INSTALLATION
 - Strict Content-Security-Policy, no external scripts, fonts or trackers — Budget Cockpit never calls the Internet
 - API keys shown once and stored only as a hash
 - Runs as a non-root user in a read-only container
+
+<table>
+<tr>
+<td width="66%" valign="top"><img src="docs/images/en/totp-setup.png" alt="Turning on two-factor authentication with a QR code"></td>
+<td width="34%" valign="top"><img src="docs/images/en/login-code.png" alt="The code asked after the password, on a phone"></td>
+</tr>
+<tr>
+<td align="center"><b>Two-factor authentication in one scan</b></td>
+<td align="center"><b>The code asked after the password</b></td>
+</tr>
+</table>
 
 Details and reporting: [SECURITY.md](SECURITY.md).
 

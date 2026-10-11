@@ -5,6 +5,8 @@
 - **Charts.** The budget page shows the current account at the end of each month against the safety threshold, with under-threshold and overdraft months marked and the lowest point labelled (12 months, 24 months or the whole forecast). The summary page adds what each month adds to or takes from the account, the planned savings, and the result of each group with its year-to-date total. Hover or keyboard focus shows the details of a month.
 - **Saving room**, under the account chart: how much more can be put aside, and by when, without going under the threshold — or, when the plan already goes under it, how much is missing and by which month.
 - Charts are SVG drawn on the server, styled for light and dark themes; colours checked for colour-blind separation. No new dependency, nothing loaded from the Internet.
+- On phones, the four figures at the top of the budget stay two by two and the balances form takes two rows.
+- README: new screenshots (computer and phone, charts, accounts, two-factor authentication) and an at-a-glance overview.
 
 ## 0.2.0 — 2026-10-11
 
