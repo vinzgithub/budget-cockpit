@@ -179,6 +179,12 @@ Tout usage commercial — revente, redistribution payante, hébergement payant, 
 
 ---
 
+## 🤖 Développé avec l'aide de l'IA
+
+Budget Cockpit est développé avec l'assistance de Claude, l'assistant IA d'Anthropic, qui contribue à la conception, au code, aux tests et à la documentation. L'auteur décide de ce qui entre dans le projet et publie chaque version.
+
+---
+
 ## ℹ️ Avertissement
 
 Budget Cockpit est un outil de prévision, pas un conseil financier ou fiscal. Une prévision ne vaut que par les montants saisis.

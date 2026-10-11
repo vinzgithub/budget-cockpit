@@ -179,6 +179,12 @@ Commercial use, resale, paid redistribution, paid hosting, inclusion in a commer
 
 ---
 
+## 🤖 Built with AI assistance
+
+Budget Cockpit is developed with the assistance of Claude, Anthropic's AI assistant, which contributes to the design, code, tests and documentation. The author decides what goes into the project and publishes every release.
+
+---
+
 ## ℹ️ Disclaimer
 
 Budget Cockpit is a forecasting tool, not financial or tax advice. Forecasts are only as good as the amounts you enter.
