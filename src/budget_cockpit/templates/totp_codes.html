@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ t('mfa.codes_title') }}{% endblock %}
+{% block content %}
+<h1>{{ t('mfa.codes_title') }}</h1>
+{% if just_enabled %}<div class="flash ok">{{ t('mfa.enabled_now') }}</div>{% endif %}
+
+<section class="panel">
+  <p><strong>{{ t('mfa.codes_once') }}</strong></p>
+  <ul class="recovery-codes">
+    {% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}
+  </ul>
+  <p class="muted">{{ t('mfa.codes_help') }}</p>
+  <p><a class="button primary" href="/settings#mfa">{{ t('mfa.codes_done') }}</a></p>
+</section>
+{% endblock %}

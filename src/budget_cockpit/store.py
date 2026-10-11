@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -38,6 +40,12 @@ CREATE TABLE IF NOT EXISTS overrides (
 CREATE TABLE IF NOT EXISTS api_tokens (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
     created_at TEXT NOT NULL, last_used TEXT);
+CREATE TABLE IF NOT EXISTS totp (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    secret TEXT NOT NULL, last_step INTEGER NOT NULL DEFAULT 0, enabled_at TEXT);
+CREATE TABLE IF NOT EXISTS recovery_codes (
+    id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL, used_at TEXT);
 """
 
 
@@ -224,6 +232,17 @@ class Store:
     def close(self) -> None:
         self.db.close()
 
+    @contextmanager
+    def _transaction(self):
+        with self._lock:
+            self.db.execute("BEGIN")
+            try:
+                yield
+            except BaseException:
+                self.db.execute("ROLLBACK")
+                raise
+            self.db.execute("COMMIT")
+
     # meta / settings
     def get_meta(self, key: str) -> str | None:
         row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
@@ -262,6 +281,63 @@ class Store:
     def set_password(self, user_id: int, pw_hash: str) -> None:
         with self._lock:
             self.db.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (pw_hash, user_id))
+
+    # sessions: changing the epoch signs out every browser of that user
+    def session_epoch(self, user_id: int) -> str:
+        return self.get_meta(f"session_epoch:{user_id}") or "0"
+
+    def new_session_epoch(self, user_id: int) -> str:
+        epoch = secrets.token_hex(8)
+        self.set_meta(f"session_epoch:{user_id}", epoch)
+        return epoch
+
+    # two-factor authentication (TOTP). A row without enabled_at is a setup in progress.
+    def get_totp(self, user_id: int):
+        return self.db.execute("SELECT * FROM totp WHERE user_id = ?", (user_id,)).fetchone()
+
+    def totp_enabled(self, user_id: int) -> bool:
+        row = self.get_totp(user_id)
+        return bool(row and row["enabled_at"])
+
+    def start_totp_setup(self, user_id: int, secret: str) -> None:
+        with self._lock:
+            self.db.execute("INSERT INTO totp(user_id, secret, last_step, enabled_at) VALUES(?, ?, 0, NULL) "
+                            "ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, last_step = 0, "
+                            "enabled_at = NULL WHERE totp.enabled_at IS NULL", (user_id, secret))
+
+    def enable_totp(self, user_id: int, step: int, code_hashes: list[str]) -> None:
+        with self._transaction():
+            self.db.execute("UPDATE totp SET enabled_at = ?, last_step = ? WHERE user_id = ?", (now(), step, user_id))
+            self._replace_recovery_codes(user_id, code_hashes)
+
+    def set_totp_last_step(self, user_id: int, step: int) -> None:
+        with self._lock:
+            self.db.execute("UPDATE totp SET last_step = MAX(last_step, ?) WHERE user_id = ?", (step, user_id))
+
+    def disable_totp(self, user_id: int) -> None:
+        with self._transaction():
+            self.db.execute("DELETE FROM totp WHERE user_id = ?", (user_id,))
+            self.db.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
+
+    def _replace_recovery_codes(self, user_id: int, code_hashes: list[str]) -> None:
+        self.db.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
+        self.db.executemany("INSERT INTO recovery_codes(user_id, code_hash) VALUES(?, ?)",
+                            [(user_id, h) for h in code_hashes])
+
+    def replace_recovery_codes(self, user_id: int, code_hashes: list[str]) -> None:
+        with self._transaction():
+            self._replace_recovery_codes(user_id, code_hashes)
+
+    def use_recovery_code(self, user_id: int, code_hash: str) -> bool:
+        with self._lock:
+            cur = self.db.execute("UPDATE recovery_codes SET used_at = ? WHERE id = (SELECT id FROM recovery_codes "
+                                  "WHERE user_id = ? AND code_hash = ? AND used_at IS NULL LIMIT 1)",
+                                  (now(), user_id, code_hash))
+            return cur.rowcount == 1
+
+    def recovery_codes_left(self, user_id: int) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL",
+                               (user_id,)).fetchone()[0]
 
     # lines
     @staticmethod

@@ -1,6 +1,7 @@
-"""Command line helpers.
+"""Command line helpers, for the person who runs the server.
 
     python -m budget_cockpit.cli reset-password <username>
+    python -m budget_cockpit.cli disable-totp <username>
 """
 
 from __future__ import annotations
@@ -19,14 +20,17 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     reset = sub.add_parser("reset-password", help="set a new password for an account")
     reset.add_argument("username")
+    totp = sub.add_parser("disable-totp", help="turn off two-factor authentication (lost phone and recovery codes)")
+    totp.add_argument("username")
     args = parser.parse_args(argv)
 
     store = Store(Config.from_env().db_path)
+    user = store.get_user_by_name(args.username)
+    if user is None:
+        print(f"Unknown user: {args.username}", file=sys.stderr)
+        return 1
+
     if args.command == "reset-password":
-        user = store.get_user_by_name(args.username)
-        if user is None:
-            print(f"Unknown user: {args.username}", file=sys.stderr)
-            return 1
         password = getpass.getpass("New password: ")
         if len(password) < MIN_PASSWORD_LENGTH:
             print(f"Password too short (at least {MIN_PASSWORD_LENGTH} characters).", file=sys.stderr)
@@ -35,7 +39,16 @@ def main(argv: list[str] | None = None) -> int:
             print("Passwords do not match.", file=sys.stderr)
             return 1
         store.set_password(user["id"], hash_password(password))
-        print("Password updated.")
+        store.new_session_epoch(user["id"])
+        print("Password updated. Every browser has been signed out.")
+    elif args.command == "disable-totp":
+        if store.get_totp(user["id"]) is None:
+            print("Two-factor authentication is not enabled for this account.")
+            return 0
+        store.disable_totp(user["id"])
+        store.new_session_epoch(user["id"])
+        print("Two-factor authentication disabled. Every browser has been signed out.")
+        print("Sign in with the password only, then turn it on again in Settings.")
     return 0
 
 

@@ -6,10 +6,12 @@ Run with:  uvicorn --factory budget_cockpit.app:create_app
 from __future__ import annotations
 
 import json
+import time
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import segno
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -28,8 +30,14 @@ from .security import (
     csrf_token,
     csrf_valid,
     hash_password,
+    is_totp_code,
+    new_recovery_codes,
     new_token,
+    new_totp_secret,
+    recovery_code_hash,
     token_hash,
+    totp_match,
+    totp_uri,
     verify_password,
 )
 from .store import (
@@ -44,6 +52,8 @@ from .store import (
 
 BASE = Path(__file__).parent
 MAX_IMPORT_BYTES = 2 * 1024 * 1024
+# Time allowed between the right password and the authenticator code.
+MFA_PENDING_SECONDS = 300
 
 
 class NeedSetup(Exception):
@@ -127,7 +137,47 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     def user_of(request: Request):
         uid = request.session.get("uid")
-        return store.get_user(uid) if uid else None
+        if not uid:
+            return None
+        # A password change or a change of two-factor settings signs out every other browser.
+        if request.session.get("epoch", "0") != store.session_epoch(uid):
+            return None
+        return store.get_user(uid)
+
+    def sign_in(request: Request, user_id: int, lang: str) -> None:
+        request.session.clear()
+        request.session["uid"] = user_id
+        request.session["epoch"] = store.session_epoch(user_id)
+        request.session["lang"] = lang
+
+    def sign_out_other_browsers(request: Request, user_id: int) -> None:
+        request.session["epoch"] = store.new_session_epoch(user_id)
+
+    def client_key(request: Request) -> str:
+        return request.client.host if request.client else "unknown"
+
+    def check_second_factor(user_id: int, code: str) -> str | None:
+        """'totp' or 'recovery' when ``code`` is valid (and now used up), else None."""
+        row = store.get_totp(user_id)
+        if row is None or not row["enabled_at"]:
+            return None
+        if is_totp_code(code):
+            step = totp_match(row["secret"], code, row["last_step"])
+            if step is None:
+                return None
+            store.set_totp_last_step(user_id, step)
+            return "totp"
+        if code.strip() and store.use_recovery_code(user_id, recovery_code_hash(code)):
+            return "recovery"
+        return None
+
+    def pending_login(request: Request):
+        """The user who gave the right password and still has to type a code."""
+        uid = request.session.get("mfa_uid")
+        started = request.session.get("mfa_at", 0)
+        if not uid or not 0 <= time.time() - started <= MFA_PENDING_SECONDS:
+            return None
+        return store.get_user(uid)
 
     def require_user(request: Request):
         if store.user_count() == 0:
@@ -245,9 +295,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             s = settings_now()
             s.locale = lang
             store.save_settings(s)
-        request.session.clear()
-        request.session["uid"] = uid
-        request.session["lang"] = lang
+        sign_in(request, uid, lang)
         if form.get("demo"):
             return redirect("/budget")
         flash(request, "info", "flash.welcome")
@@ -263,7 +311,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def login_submit(request: Request):
         form = await request.form()
         check_csrf(request, form)
-        key = request.client.host if request.client else "unknown"
+        key = client_key(request)
         lang = lang_of(request)
         if throttle.locked(key):
             return render(request, "login.html", status=429, error=t(lang, "error.locked"))
@@ -271,10 +319,46 @@ def create_app(config: Config | None = None) -> FastAPI:
         if user is None or not verify_password(str(form.get("password", "")), user["pw_hash"]):
             throttle.failure(key)
             return render(request, "login.html", status=401, error=t(lang, "error.login"))
+        if store.totp_enabled(user["id"]):
+            # Right password, the code comes next. The throttle is not reset here, so wrong
+            # codes and wrong passwords add up: retyping the password does not buy more tries.
+            request.session.clear()
+            request.session["mfa_uid"] = user["id"]
+            request.session["mfa_at"] = int(time.time())
+            request.session["lang"] = lang
+            return redirect("/login/code")
         throttle.success(key)
-        request.session.clear()
-        request.session["uid"] = user["id"]
-        request.session["lang"] = lang
+        sign_in(request, user["id"], lang)
+        return redirect("/budget")
+
+    @app.get("/login/code")
+    async def login_code_page(request: Request):
+        if pending_login(request) is None:
+            return redirect("/login")
+        return render(request, "login_code.html")
+
+    @app.post("/login/code")
+    async def login_code_submit(request: Request):
+        form = await request.form()
+        check_csrf(request, form)
+        key = client_key(request)
+        lang = lang_of(request)
+        user = pending_login(request)
+        if user is None:
+            request.session.pop("mfa_uid", None)
+            flash(request, "error", "error.code_expired")
+            return redirect("/login")
+        if throttle.locked(key):
+            return render(request, "login_code.html", status=429, error=t(lang, "error.locked"))
+        used = check_second_factor(user["id"], str(form.get("code", "")))
+        if used is None:
+            throttle.failure(key)
+            return render(request, "login_code.html", status=401, error=t(lang, "error.code"))
+        throttle.success(key)
+        sign_in(request, user["id"], lang)
+        if used == "recovery":
+            flash(request, "warn", "flash.recovery_used", n=store.recovery_codes_left(user["id"]))
+            return redirect("/settings#mfa")
         return redirect("/budget")
 
     @app.post("/logout")
@@ -464,8 +548,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     def settings_page(request: Request, status: int = 200, **ctx):
         s = settings_now()
         p = project(s, store.list_lines(), store.list_overrides())
-        return render(request, "settings.html", status=status, s=s, p=p,
-                      tokens=store.list_tokens(), **ctx)
+        user = user_of(request)
+        mfa = store.totp_enabled(user["id"]) if user else False
+        return render(request, "settings.html", status=status, s=s, p=p, tokens=store.list_tokens(),
+                      mfa_enabled=mfa, recovery_left=store.recovery_codes_left(user["id"]) if mfa else 0, **ctx)
 
     @app.get("/settings")
     async def settings_get(request: Request):
@@ -508,6 +594,16 @@ def create_app(config: Config | None = None) -> FastAPI:
         flash(request, "ok", "flash.month_closed", month=fmt_month(closed, lang_of(request), long=True))
         return redirect("/budget")
 
+    def check_password_again(request: Request, user, password: str) -> str | None:
+        """Translation key of the error, or None. Throttled like the login page."""
+        key = client_key(request)
+        if throttle.locked(key):
+            return "error.locked"
+        if not verify_password(password, user["pw_hash"]):
+            throttle.failure(key)
+            return "error.password_current"
+        return None
+
     @app.post("/settings/password")
     async def settings_password(request: Request):
         user = require_user(request)
@@ -515,15 +611,110 @@ def create_app(config: Config | None = None) -> FastAPI:
         check_csrf(request, form)
         lang = lang_of(request)
         new = str(form.get("new", ""))
-        if not verify_password(str(form.get("current", "")), user["pw_hash"]):
-            return settings_page(request, status=400, error=t(lang, "error.password_current"))
+        error = check_password_again(request, user, str(form.get("current", "")))
+        if error:
+            return settings_page(request, status=400, error=t(lang, error))
         if len(new) < MIN_PASSWORD_LENGTH:
             return settings_page(request, status=400, error=t(lang, "error.password_short", n=MIN_PASSWORD_LENGTH))
         if new != form.get("new2"):
             return settings_page(request, status=400, error=t(lang, "error.password_mismatch"))
         store.set_password(user["id"], hash_password(new))
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
         flash(request, "ok", "flash.password_changed")
         return redirect("/settings")
+
+    # ------------------------------------------- two-factor authentication
+    def totp_setup_page(request: Request, user, status: int = 200, **ctx):
+        row = store.get_totp(user["id"])
+        secret = row["secret"]
+        qr = segno.make(totp_uri(secret, user["username"]), error="m")
+        return render(request, "totp_setup.html", status=status,
+                      qr=qr.svg_data_uri(scale=5, border=3, dark="#14213d", light="#ffffff"),
+                      secret_groups=[secret[i:i + 4] for i in range(0, len(secret), 4)], **ctx)
+
+    def check_password_and_code(request: Request, user, form) -> str | None:
+        """Password and authenticator (or recovery) code, both required to change 2FA settings."""
+        error = check_password_again(request, user, str(form.get("password", "")))
+        if error:
+            return error
+        if check_second_factor(user["id"], str(form.get("code", ""))) is None:
+            throttle.failure(client_key(request))
+            return "error.code"
+        return None
+
+    @app.post("/settings/totp/setup")
+    async def totp_setup(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if not store.totp_enabled(user["id"]):
+            store.start_totp_setup(user["id"], new_totp_secret())
+        return redirect("/settings/totp")
+
+    @app.get("/settings/totp")
+    async def totp_setup_get(request: Request):
+        user = require_user(request)
+        row = store.get_totp(user["id"])
+        if row is None or row["enabled_at"]:
+            return redirect("/settings#mfa")
+        return totp_setup_page(request, user)
+
+    @app.post("/settings/totp/enable")
+    async def totp_enable(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        lang = lang_of(request)
+        row = store.get_totp(user["id"])
+        if row is None or row["enabled_at"]:
+            return redirect("/settings#mfa")
+        error = check_password_again(request, user, str(form.get("password", "")))
+        step = None if error else totp_match(row["secret"], str(form.get("code", "")), 0)
+        if error or step is None:
+            if not error:
+                throttle.failure(client_key(request))
+            return totp_setup_page(request, user, status=400, error=t(lang, error or "error.code_setup"))
+        codes = new_recovery_codes()
+        store.enable_totp(user["id"], step, [recovery_code_hash(c) for c in codes])
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
+        # Shown once, directly in this response: only their hashes are stored.
+        return render(request, "totp_codes.html", codes=codes, just_enabled=True)
+
+    @app.post("/settings/totp/codes")
+    async def totp_new_codes(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if not store.totp_enabled(user["id"]):
+            return redirect("/settings#mfa")
+        error = check_password_and_code(request, user, form)
+        if error:
+            return settings_page(request, status=400, error=t(lang_of(request), error))
+        codes = new_recovery_codes()
+        store.replace_recovery_codes(user["id"], [recovery_code_hash(c) for c in codes])
+        throttle.success(client_key(request))
+        return render(request, "totp_codes.html", codes=codes, just_enabled=False)
+
+    @app.post("/settings/totp/disable")
+    async def totp_disable(request: Request):
+        user = require_user(request)
+        form = await request.form()
+        check_csrf(request, form)
+        if store.get_totp(user["id"]) is None:
+            return redirect("/settings#mfa")
+        if not store.totp_enabled(user["id"]):  # setup cancelled before the first code
+            store.disable_totp(user["id"])
+            return redirect("/settings#mfa")
+        error = check_password_and_code(request, user, form)
+        if error:
+            return settings_page(request, status=400, error=t(lang_of(request), error))
+        store.disable_totp(user["id"])
+        sign_out_other_browsers(request, user["id"])
+        throttle.success(client_key(request))
+        flash(request, "ok", "flash.totp_disabled")
+        return redirect("/settings#mfa")
 
     @app.post("/settings/token")
     async def settings_token(request: Request):

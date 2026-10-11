@@ -93,4 +93,28 @@
     <div class="span2 buttons"><button class="button">{{ t('password.submit') }}</button></div>
   </form>
 </section>
+
+<section class="panel" id="mfa">
+  <h2>{{ t('mfa.title') }}</h2>
+  {% if mfa_enabled %}
+  <p><span class="tag tag-ok">{{ t('mfa.status_on') }}</span>
+     {{ t('mfa.codes_left', n=recovery_left) }}</p>
+  <p class="muted">{{ t('mfa.manage_help') }}</p>
+  <form method="post" action="/settings/totp/codes" class="form-grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>{{ t('mfa.password') }}<input type="password" name="password" autocomplete="current-password" required></label>
+    <label>{{ t('mfa.code_or_recovery') }}<input name="code" class="code-input" autocomplete="one-time-code" maxlength="16" required></label>
+    <div class="span2 buttons">
+      <button class="button">{{ t('mfa.new_codes') }}</button>
+      <button class="button danger" formaction="/settings/totp/disable" data-confirm="{{ t('mfa.confirm_disable') }}">{{ t('mfa.disable') }}</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted">{{ t('mfa.intro') }}</p>
+  <form method="post" action="/settings/totp/setup" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="button primary">{{ t('mfa.start') }}</button>
+  </form>
+  {% endif %}
+</section>
 {% endblock %}
