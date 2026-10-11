@@ -60,7 +60,7 @@ def first_login(client, username="steph"):
     token = csrf_of(client.get("/account/password").text)
     r = client.post("/account/password", data={"csrf": token, "new": STEPH_PASSWORD, "new2": STEPH_PASSWORD},
                     follow_redirects=False)
-    assert r.headers["location"] == "/budget"
+    assert r.headers["location"] in ("/budget", "/settings")
 
 
 def user_id(app, username):
@@ -111,6 +111,7 @@ def test_new_user_picks_a_password_then_gets_an_empty_budget(app, admin, steph):
     r = steph.post("/account/password", data={"csrf": csrf_of(page), "new": TEMP, "new2": TEMP})
     assert r.status_code == 400
     first_login(steph)
+    assert "then add your lines" in steph.get("/settings").text  # welcome on an empty budget
     page = steph.get("/budget").text
     assert "Left (end of month)" in page and "Seasonal rental" not in page
     assert app.state.budgets.get(user_id(app, "steph")).list_lines() == []

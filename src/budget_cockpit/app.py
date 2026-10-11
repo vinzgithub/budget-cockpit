@@ -455,6 +455,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         accounts.set_password(user["id"], hash_password(new), must_change=False)
         sign_out_other_browsers(request, user["id"])
         flash(request, "ok", "flash.password_set")
+        if not budgets.get(user["id"]).list_lines():  # empty budget: start with the balances
+            flash(request, "info", "flash.welcome")
+            return redirect("/settings")
         return redirect("/budget")
 
     # -------------------------------------------------------------- budget
