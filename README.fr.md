@@ -91,6 +91,20 @@ Dans le mois en cours, coche **✓** quand une dépense est payée ou une rentr�
 
 ---
 
+## 📈 Des courbes qui répondent à une question
+
+<img src="docs/images/fr/budget-chart.png"
+     alt="Le compte courant en fin de mois, face au seuil de sécurité"
+     width="100%">
+
+- **Ton compte courant, fin de mois** : quand tu passes sous ton seuil ou à découvert, et jusqu'où tu descends
+- **Ta marge d'épargne** : combien tu peux encore mettre de côté, et d'ici quand, sans passer sous le seuil — ou combien il te manque, et pour quand
+- Dans la synthèse : **ce que chaque mois ajoute ou retire à ton compte**, **ton épargne prévue** et le **résultat de chaque groupe** (une maison louée, par exemple) avec son cumul de l'année
+
+Survole ou touche un mois pour le détail. Les courbes sont dessinées par le serveur : rien n'est chargé depuis Internet.
+
+---
+
 ## 📊 Toute l'année d'un coup d'œil
 
 <img src="docs/images/fr/summary.png"

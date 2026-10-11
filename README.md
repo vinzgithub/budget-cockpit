@@ -91,6 +91,20 @@ During the current month, tick **✓** when an expense is paid or income receive
 
 ---
 
+## 📈 Charts that answer a question
+
+<img src="docs/images/en/budget-chart.png"
+     alt="Current account at the end of each month, against the safety threshold"
+     width="100%">
+
+- **Your current account, end of month**: when you go under your threshold or into overdraft, and how low you go
+- **Your saving room**: how much more you can put aside, and by when, without going under the threshold — or how much is missing, and by when
+- In the summary: **what each month adds to or takes from your account**, **your planned savings**, and the **result of each group** (a rental property, say) with its year-to-date total
+
+Hover or tap a month for the details. The charts are drawn by the server: nothing is loaded from the Internet.
+
+---
+
 ## 📊 See the whole year
 
 <img src="docs/images/en/summary.png"

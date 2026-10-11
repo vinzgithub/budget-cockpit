@@ -254,3 +254,30 @@ def test_locales_are_complete():
     used = {k for k in used if not k.endswith((".", "_", ".html"))}  # dynamic prefixes, template names
     missing = sorted(k for k in used | dynamic if k not in fr)
     assert missing == []
+
+
+def test_budget_page_draws_the_account_chart(client):
+    setup_account(client, demo=True)
+    html = client.get("/budget").text
+    chart = html.split('id="chart"')[1].split("</section>")[0]
+    assert chart.count('class="hit"') == 12 and "Seuil de sécurité" in chart
+    assert "mettre de côté" in chart or "il te manque" in chart
+    assert client.get("/budget?mois=all").text.count('class="hit"') == 24  # the whole horizon
+    assert client.get("/budget?mois=nonsense").text.count('class="hit"') == 12
+
+
+def test_summary_charts_escape_group_names(client):
+    setup_account(client, demo=True)
+    add_line(client, name="Garage", group='<img src=x onerror="alert(1)">', amount="10")
+    html = client.get("/summary?mois=12").text
+    assert html.count('class="chart-svg"') == 4  # month balance, savings, two groups
+    assert '<img src=x onerror="alert(1)">' not in html
+    assert "&lt;img src=x onerror=" in html
+
+
+def test_nice_ticks():
+    from budget_cockpit.charts import nice_ticks
+    assert nice_ticks(-1119.28, 6562.62) == [-2000, 0, 2000, 4000, 6000, 8000]
+    assert nice_ticks(0, 0) == [0, 20, 40, 60, 80, 100]
+    assert nice_ticks(3.2, 3.6) == [0, 20, 40, 60, 80, 100, 120]
+    assert nice_ticks(41.82, 8713) == [0, 2000, 4000, 6000, 8000, 10000]
