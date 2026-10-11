@@ -214,7 +214,8 @@ main.auth { min-height: 85vh; display: grid; place-items: center; padding: 1.25r
 .qr img { display: block; width: 235px; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
 .totp-setup details { margin: 0 0 1.5rem; }
 .totp-setup summary { cursor: pointer; color: var(--brand); }
-.totp-setup h2 { margin-top: 1.25rem; }
+.totp-setup h2:not(:first-child) { margin-top: 1.5rem; }
+.auth-card h2 { margin: 1.25rem 0 .5rem; }
 code.secret { margin-top: .6rem; font-size: 1.05rem; letter-spacing: .06em; }
 .code-input { font-variant-numeric: tabular-nums; letter-spacing: .12em; }
 .recovery-codes { list-style: none; padding: 0; margin: .75rem 0 1rem; display: grid;

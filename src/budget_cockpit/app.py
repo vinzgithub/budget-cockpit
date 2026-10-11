@@ -358,7 +358,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         sign_in(request, user["id"], lang)
         if used == "recovery":
             flash(request, "warn", "flash.recovery_used", n=store.recovery_codes_left(user["id"]))
-            return redirect("/settings#mfa")
         return redirect("/budget")
 
     @app.post("/logout")

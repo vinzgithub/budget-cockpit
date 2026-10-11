@@ -137,8 +137,8 @@ def test_recovery_code_works_once(client, clock):
     log_out(client)
     log_in_password(client)
     r = send_code(client, codes[0].upper().replace("-", " "))  # case and separators do not matter
-    assert r.headers["location"] == "/settings#mfa"
-    assert "Il t&#39;en reste 9" in client.get("/settings").text
+    assert r.headers["location"] == "/budget"
+    assert "Il t&#39;en reste 9" in client.get("/budget").text
     log_out(client)
     log_in_password(client)
     assert send_code(client, codes[0]).status_code == 401

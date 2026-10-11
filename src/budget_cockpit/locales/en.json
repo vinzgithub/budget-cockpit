@@ -198,7 +198,7 @@
   "flash.password_changed": "Password changed. Other browsers have been logged out.",
   "flash.token_revoked": "Key revoked.",
   "flash.imported": "Import complete.",
-  "flash.recovery_used": "Logged in with a recovery code. {n} left: get new ones if needed.",
+  "flash.recovery_used": "Logged in with a recovery code. {n} left: get new ones in Settings if needed.",
   "flash.totp_disabled": "Two-factor authentication turned off.",
   "error.title": "Oops",
   "error.back": "Back to the budget",

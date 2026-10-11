@@ -198,7 +198,7 @@
   "flash.password_changed": "Mot de passe changé. Les autres navigateurs ont été déconnectés.",
   "flash.token_revoked": "Clé révoquée.",
   "flash.imported": "Import terminé.",
-  "flash.recovery_used": "Connexion avec un code de secours. Il t'en reste {n} : génère-en de nouveaux si besoin.",
+  "flash.recovery_used": "Connexion avec un code de secours. Il t'en reste {n} : si besoin, génère-en de nouveaux dans Paramètres.",
   "flash.totp_disabled": "Double authentification désactivée.",
   "error.title": "Oups",
   "error.back": "Retour au budget",
