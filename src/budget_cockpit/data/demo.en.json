@@ -1,0 +1,153 @@
+{
+  "format": "budget-cockpit",
+  "version": 1,
+  "settings": {
+    "start_month": "2026-01",
+    "horizon": 24,
+    "current_balance": "1000",
+    "savings_balance": "4200",
+    "safety_threshold": "150",
+    "currency": "EUR",
+    "locale": "en"
+  },
+  "lines": [
+    {
+      "name": "Salary",
+      "kind": "income",
+      "amount": "2900",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Seasonal rental",
+      "kind": "income",
+      "group": "Holiday let",
+      "frequency": "profile",
+      "profile": [
+        "300",
+        "300",
+        "350",
+        "600",
+        "900",
+        "1800",
+        "3200",
+        "3400",
+        "1200",
+        "500",
+        "300",
+        "400"
+      ]
+    },
+    {
+      "name": "Annual bonus",
+      "kind": "income",
+      "amount": "1200",
+      "frequency": "yearly",
+      "month": 12
+    },
+    {
+      "name": "One-off income",
+      "kind": "income",
+      "frequency": "manual"
+    },
+    {
+      "name": "Rent",
+      "kind": "expense",
+      "amount": "950",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Groceries and leisure",
+      "kind": "expense",
+      "amount": "600",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Transport",
+      "kind": "expense",
+      "amount": "75",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Internet and phone",
+      "kind": "expense",
+      "amount": "45",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Insurance",
+      "kind": "expense",
+      "amount": "85",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Electricity",
+      "kind": "expense",
+      "frequency": "profile",
+      "profile": [
+        "110",
+        "110",
+        "90",
+        "70",
+        "50",
+        "40",
+        "40",
+        "40",
+        "50",
+        "70",
+        "90",
+        "110"
+      ]
+    },
+    {
+      "name": "One-off expense",
+      "kind": "expense",
+      "frequency": "manual"
+    },
+    {
+      "name": "Holiday let loan",
+      "kind": "expense",
+      "group": "Holiday let",
+      "amount": "1000",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Holiday let costs",
+      "kind": "expense",
+      "group": "Holiday let",
+      "amount": "180",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Property tax",
+      "kind": "expense",
+      "group": "Holiday let",
+      "amount": "980",
+      "frequency": "yearly",
+      "month": 10
+    },
+    {
+      "name": "Rental tax provision",
+      "kind": "expense",
+      "group": "Holiday let",
+      "frequency": "yearly_table",
+      "yearly_table": {
+        "2027": "900",
+        "2028": "1500"
+      },
+      "note": "Tax on a year's rent, set aside during that year."
+    },
+    {
+      "name": "Savings",
+      "kind": "savings",
+      "amount": "250",
+      "frequency": "monthly"
+    },
+    {
+      "name": "End-of-summer transfer",
+      "kind": "savings",
+      "frequency": "yearly",
+      "month": 9,
+      "amount": "5000"
+    }
+  ]
+}

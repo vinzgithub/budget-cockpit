@@ -1,0 +1,153 @@
+{
+  "format": "budget-cockpit",
+  "version": 1,
+  "settings": {
+    "start_month": "2026-01",
+    "horizon": 24,
+    "current_balance": "1000",
+    "savings_balance": "4200",
+    "safety_threshold": "150",
+    "currency": "EUR",
+    "locale": "fr"
+  },
+  "lines": [
+    {
+      "name": "Salaire",
+      "kind": "income",
+      "amount": "2900",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Location saisonnière",
+      "kind": "income",
+      "group": "Gîte",
+      "frequency": "profile",
+      "profile": [
+        "300",
+        "300",
+        "350",
+        "600",
+        "900",
+        "1800",
+        "3200",
+        "3400",
+        "1200",
+        "500",
+        "300",
+        "400"
+      ]
+    },
+    {
+      "name": "Prime annuelle",
+      "kind": "income",
+      "amount": "1200",
+      "frequency": "yearly",
+      "month": 12
+    },
+    {
+      "name": "Rentrée exceptionnelle",
+      "kind": "income",
+      "frequency": "manual"
+    },
+    {
+      "name": "Loyer",
+      "kind": "expense",
+      "amount": "950",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Courses et loisirs",
+      "kind": "expense",
+      "amount": "600",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Transports",
+      "kind": "expense",
+      "amount": "75",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Box et mobile",
+      "kind": "expense",
+      "amount": "45",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Assurances",
+      "kind": "expense",
+      "amount": "85",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Électricité",
+      "kind": "expense",
+      "frequency": "profile",
+      "profile": [
+        "110",
+        "110",
+        "90",
+        "70",
+        "50",
+        "40",
+        "40",
+        "40",
+        "50",
+        "70",
+        "90",
+        "110"
+      ]
+    },
+    {
+      "name": "Dépense exceptionnelle",
+      "kind": "expense",
+      "frequency": "manual"
+    },
+    {
+      "name": "Crédit du gîte",
+      "kind": "expense",
+      "group": "Gîte",
+      "amount": "1000",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Charges du gîte",
+      "kind": "expense",
+      "group": "Gîte",
+      "amount": "180",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Taxe foncière",
+      "kind": "expense",
+      "group": "Gîte",
+      "amount": "980",
+      "frequency": "yearly",
+      "month": 10
+    },
+    {
+      "name": "Provision impôt location",
+      "kind": "expense",
+      "group": "Gîte",
+      "frequency": "yearly_table",
+      "yearly_table": {
+        "2027": "900",
+        "2028": "1500"
+      },
+      "note": "Impôt sur les loyers d'une année, mis de côté l'année même."
+    },
+    {
+      "name": "Épargne",
+      "kind": "savings",
+      "amount": "250",
+      "frequency": "monthly"
+    },
+    {
+      "name": "Virement de fin d'été",
+      "kind": "savings",
+      "frequency": "yearly",
+      "month": 9,
+      "amount": "5000"
+    }
+  ]
+}

@@ -10,7 +10,8 @@ dist/
 *.egg-info/
 
 # Local data: never commit your finances
-data/
+# (anchored to the top level: src/budget_cockpit/data/ holds the demo household and must be shipped)
+/data/
 *.db
 *.db-wal
 *.db-shm
