@@ -234,7 +234,8 @@
   "error.code_setup": "Code incorrect. Vérifie que ton téléphone est à l'heure et tape le code affiché maintenant.",
   "error.code_expired": "Délai dépassé. Reconnecte-toi avec ton mot de passe.",
   "budget.balance_today": "Solde du compte aujourd'hui",
+  "budget.savings_today": "Épargne aujourd'hui",
   "budget.balance_update": "Mettre à jour",
   "budget.balance_hint": "Puis coche ✓ ce qui est déjà passé ce mois-ci.",
-  "flash.balance_saved": "Solde mis à jour."
+  "flash.balance_saved": "Soldes mis à jour."
 }

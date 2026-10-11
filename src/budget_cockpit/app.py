@@ -427,11 +427,14 @@ def create_app(config: Config | None = None) -> FastAPI:
         check_csrf(request, form)
         try:
             value = parse_amount(form.get("current_balance"))
+            savings = parse_amount(form.get("savings_balance"), allow_empty=True)
         except ValidationError as e:
             flash(request, "error", e.key)
             return redirect("/budget")
         s = settings_now()
         s.current_balance = value
+        if savings is not None:
+            s.savings_balance = savings
         store.save_settings(s)
         flash(request, "ok", "flash.balance_saved")
         return redirect("/budget")

@@ -234,7 +234,8 @@
   "error.code_setup": "Wrong code. Check that your phone's clock is right and type the code shown now.",
   "error.code_expired": "Too slow. Log in again with your password.",
   "budget.balance_today": "Account balance today",
+  "budget.savings_today": "Savings today",
   "budget.balance_update": "Update",
   "budget.balance_hint": "Then tick ✓ what has already gone through this month.",
-  "flash.balance_saved": "Balance updated."
+  "flash.balance_saved": "Balances updated."
 }

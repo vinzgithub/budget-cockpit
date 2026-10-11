@@ -36,6 +36,8 @@
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <label for="current_balance">{{ t('budget.balance_today') }}</label>
   <input id="current_balance" name="current_balance" inputmode="decimal" value="{{ plain(s.current_balance) }}">
+  <label for="savings_balance">{{ t('budget.savings_today') }}</label>
+  <input id="savings_balance" name="savings_balance" inputmode="decimal" value="{{ plain(s.savings_balance) }}">
   <button class="button">{{ t('budget.balance_update') }}</button>
   <span class="muted small">{{ t('budget.balance_hint') }}</span>
 </form>

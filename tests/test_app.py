@@ -133,12 +133,25 @@ def test_line_cell_override_and_paid(client):
     assert r.status_code == 200 and store.get_override(line.id, month) is None
 
 
-def test_update_balance_from_budget(client):
+def test_update_balances_from_budget(client):
     setup_account(client)
-    r = client.post("/budget/balance", data={"csrf": page_csrf(client, "/budget"), "current_balance": "2 500,75"},
-                    follow_redirects=False)
+    page = client.get("/budget").text
+    assert 'name="savings_balance"' in page
+    r = client.post("/budget/balance", data={"csrf": csrf_of(page), "current_balance": "2 500,75",
+                                             "savings_balance": "6 568,24"}, follow_redirects=False)
     assert r.status_code == 303
-    assert str(client.app.state.store.get_settings("2026-10").current_balance) == "2500.75"
+    s = client.app.state.store.get_settings("2026-10")
+    assert (str(s.current_balance), str(s.savings_balance)) == ("2500.75", "6568.24")
+    # without the savings field (older page still open), the savings stay as they are
+    client.post("/budget/balance", data={"csrf": page_csrf(client, "/budget"), "current_balance": "10"})
+    s = client.app.state.store.get_settings("2026-10")
+    assert (str(s.current_balance), str(s.savings_balance)) == ("10", "6568.24")
+
+
+def test_settings_show_the_situation_before_month_closing(client):
+    setup_account(client)
+    html = client.get("/settings").text
+    assert html.index('id="situation"') < html.index('id="close"')
 
 
 def test_line_validation_error_is_shown(client):
