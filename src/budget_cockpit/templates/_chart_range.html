@@ -1,3 +1,4 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 <nav class="range" aria-label="{{ t('chart.range_label') }}">
   {% for key in ('12', '24', 'all') %}
   <a href="?mois={{ key }}{{ anchor or '' }}" class="{{ 'active' if shown == key }}"{% if shown == key %} aria-current="true"{% endif %}>{{ t('chart.range_' ~ key) }}</a>

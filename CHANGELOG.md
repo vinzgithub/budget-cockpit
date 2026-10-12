@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-12
+
+- Copyright notice and licence identifier (`SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0`) at the top of every source file, checked by a test, and in the footer of every page.
+
 ## 0.3.0 — 2026-10-11
 
 - **Charts.** The budget page shows the current account at the end of each month against the safety threshold, with under-threshold and overdraft months marked and the lowest point labelled (12 months, 24 months or the whole forecast). The summary page adds what each month adds to or takes from the account, the planned savings, and the result of each group with its year-to-date total. Hover or keyboard focus shows the details of a month.

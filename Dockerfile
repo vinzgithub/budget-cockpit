@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 # ---- build the wheel
 FROM python:3.12-slim AS build

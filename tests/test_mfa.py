@@ -1,3 +1,6 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import base64
 import re
 
