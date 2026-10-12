@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """SQLite storage, plus validated JSON import/export (backup format)."""
 
 from __future__ import annotations

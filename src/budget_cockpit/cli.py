@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Command line helpers, for the person who runs the server.
 
     python -m budget_cockpit.cli reset-password <username>

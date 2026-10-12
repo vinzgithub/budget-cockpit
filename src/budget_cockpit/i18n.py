@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Translations (fr / en) and locale-aware formatting of money and months."""
 
 from __future__ import annotations

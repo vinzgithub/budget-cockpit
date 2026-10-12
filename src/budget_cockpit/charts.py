@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Charts drawn on the server as SVG: no chart library, nothing loaded from elsewhere.
 
 Colours come from CSS classes (light and dark themes in app.css). Each month has an

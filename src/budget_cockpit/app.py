@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Budget Cockpit web application (FastAPI, server-rendered pages).
 
 Run with:  uvicorn --factory budget_cockpit.app:create_app

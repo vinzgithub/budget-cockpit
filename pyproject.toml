@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "budget-cockpit"
-version = "0.3.0"
+version = "0.3.1"
 description = "Self-hosted month-by-month budget forecast: know what will be left on your account. Home Assistant friendly."
 readme = "README.md"
 requires-python = ">=3.11"

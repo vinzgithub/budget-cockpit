@@ -1,3 +1,5 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Projection engine: turns budget lines, per-month exceptions and settings
 into a month-by-month forecast of the current-account balance.
 
