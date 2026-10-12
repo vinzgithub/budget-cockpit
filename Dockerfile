@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 # ---- build the wheel
-FROM python:3.12-slim AS build
+FROM python:3.14-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src ./src
 RUN pip install --no-cache-dir build==1.2.2 && python -m build --wheel --outdir /dist
 
 # ---- runtime image
-FROM python:3.12-slim
+FROM python:3.14-slim
 LABEL org.opencontainers.image.title="Budget Cockpit" \
       org.opencontainers.image.description="Self-hosted month-by-month budget forecast" \
       org.opencontainers.image.source="https://github.com/vinzgithub/budget-cockpit" \
